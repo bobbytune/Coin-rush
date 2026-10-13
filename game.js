@@ -46,7 +46,7 @@ const nearRamp = (x, z) => MAP.ramps.some(r => { const s = (x - r.x) * r.dx + (z
     const x = s.x - s.tz * off, z = s.z + s.tx * off;
     if (!nearRamp(x, z)) addCoin(x, 1.6, z);
   }
-  MAP.shortcuts.forEach(sc => { for (let i = 6; i < sc.samples.length - 6; i += step) { const s = sc.samples[i]; if (!nearRamp(s.x, s.z)) addCoin(s.x, 1.6, s.z); } });
+  MAP.shortcuts.forEach(sc => { for (let i = 6; i < sc.samples.length - 6; i += step) { const s = sc.samples[i]; if (!nearRamp(s.x, s.z) && MAP.surfaceAt(s.x, s.z) !== 'water') addCoin(s.x, 1.6, s.z); } });
   // a trail of coins through the air after every ramp
   MAP.ramps.forEach(r => {
     const v = 46, vy = v * r.h / r.len;
@@ -136,7 +136,8 @@ let boostMeter = 0, totalCoins = 0, shake = 0;
 function drive(c, inp, dt){
   if (c.air) { c.x += c.vx * dt; c.z += c.vz * dt; collideWorld(c); return; }
   const surface = MAP.surfaceAt(c.x, c.z);
-  const surfMul = surface === 'road' ? 1 : surface === 'dirt' ? MAP_LAYOUT.dirtSpeed : MAP_LAYOUT.grassSpeed;
+  if (surface === 'water' && c.y < 0.3) { splash(c); return; }
+  const surfMul = { road: 1, alley: MAP_LAYOUT.alleySpeed, dirt: MAP_LAYOUT.dirtSpeed }[surface] || MAP_LAYOUT.grassSpeed;
   const sh = Math.sin(c.h), ch = Math.cos(c.h);
   let vf = c.vx * sh + c.vz * ch, vl = c.vx * ch - c.vz * sh;
   const top = RACE_SETTINGS.topSpeed * c.topMul * surfMul * (c.boosting ? 1 + COIN_SETTINGS.boostPower : 1);
@@ -145,7 +146,7 @@ function drive(c, inp, dt){
   if (!inp.gas && !inp.brake) vf *= 1 - 0.7 * dt;
   if (vf > top) vf -= (vf - top) * 2.5 * dt;
   if (vf < -16) vf = -16;
-  vl *= Math.exp(-(inp.hand ? 1.4 : surface === 'road' ? 7.5 : 5) * dt);
+  vl *= Math.exp(-(inp.hand ? 1.4 : surface === 'road' || surface === 'alley' ? 7.5 : 5) * dt);
   if (inp.hand) vf *= 1 - 0.5 * dt;
   const turn = (inp.hand ? 2.7 : 1.95) * (1 - 0.3 * Math.min(1, Math.abs(vf) / 70));
   c.h += inp.steer * turn * clamp(vf / 10, -1, 1) * dt;
@@ -236,6 +237,10 @@ function checkLaps(c){
   }
   c.lapShown = Math.max(before, now);
 }
+function splash(c){
+  if (c.player) { showMsg('Splash!', 900); blip(400, 90, 0.35, 0.15, 'triangle'); shake = 0.5; }
+  resetCar(c);
+}
 function resetCar(c){
   const s = S[c.idx];
   c.x = s.x; c.z = s.z; c.h = Math.atan2(s.tx, s.tz); c.vx = c.vz = 0; c.y = 0; c.vy = 0; c.air = false; c.lastRamp = null;
@@ -271,6 +276,7 @@ const mapBg = (function(){
   const c = document.createElement('canvas'); c.width = c.height = 264; const g = c.getContext('2d');
   const W = 264, half = MAP_LAYOUT.size + 10, s = W / (half * 2), P = (x, z) => [(x + half) * s, (z + half) * s];
   g.lineCap = 'round'; g.lineJoin = 'round';
+  g.fillStyle = 'rgba(47,143,216,.75)'; MAP.water.forEach(w => { const [x, z] = P(Math.max(w.minX, -half), Math.max(w.minZ, -half)); g.fillRect(x, z, (Math.min(w.maxX, half) - Math.max(w.minX, -half)) * s, (Math.min(w.maxZ, half) - Math.max(w.minZ, -half)) * s); });
   g.fillStyle = 'rgba(255,255,255,.12)'; MAP.solids.forEach(b => { const [x, z] = P(b.minX, b.minZ); g.fillRect(x, z, (b.maxX - b.minX) * s, (b.maxZ - b.minZ) * s); });
   g.strokeStyle = 'rgba(201,162,107,.8)'; g.lineWidth = 4;
   MAP.shortcuts.forEach(sc => { g.beginPath(); sc.samples.forEach((p, i) => i ? g.lineTo(...P(p.x, p.z)) : g.moveTo(...P(p.x, p.z))); g.stroke(); });
