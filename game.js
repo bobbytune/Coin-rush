@@ -10,12 +10,23 @@ const GRAVITY = 35;
 // ---------- scene ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+if (renderer.shadowMap) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; }
 $('game').appendChild(renderer.domElement);
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 800);
+const camera = new THREE.PerspectiveCamera(70, 1, 0.3, 900);
 function resize(){ const w = innerWidth, h = innerHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize();
-const MAP = buildMap(scene);
+const MAP = buildMap(scene, renderer);
+// reflections for shiny car paint: a blurred copy of the sky and ground
+try {
+  const envScene = new THREE.Scene(), g = new THREE.SphereGeometry(10, 32, 16), p = g.attributes.position, cols = [], c = new THREE.Color();
+  const top = new THREE.Color(MAP_THEME.skyTop || MAP_THEME.sky), hor = new THREE.Color(MAP_THEME.sky), grd = new THREE.Color(MAP_THEME.grass).multiplyScalar(0.6);
+  for (let i = 0; i < p.count; i++) { const y = p.getY(i) / 10; if (y >= 0) c.copy(hor).lerp(top, Math.pow(y, 0.6)); else c.copy(hor).lerp(grd, Math.min(1, -y * 4)); cols.push(c.r, c.g, c.b); }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+  envScene.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+  const sunBlob = new THREE.Mesh(new THREE.SphereGeometry(1.2, 12, 8), new THREE.MeshBasicMaterial({ color: '#ffffff' })); sunBlob.position.set(5, 7, 3); envScene.add(sunBlob);
+  window.CAR_ENV = new THREE.PMREMGenerator(renderer).fromScene(envScene, 0.02).texture;
+} catch (e) { window.CAR_ENV = null; }
 document.body.style.background = MAP_THEME.sky;
 const S = MAP.samples, N = MAP.N;
 const mat = c => new THREE.MeshLambertMaterial({ color: c });
@@ -69,7 +80,41 @@ if (PILL) {
     border: `2px solid ${oc}`, background: `linear-gradient(90deg, ${COIN_SETTINGS.color} 50%, ${oc} 50%, ${oc} calc(50% + 2px), ${COIN_SETTINGS.secondColor || '#f2f5f3'} calc(50% + 2px))` });
 } else $('coinIco').style.background = COIN_SETTINGS.color;
 const coins = [];
-function addCoin(x, y, z){ const m = makePickup(); m.position.set(x, y, z); scene.add(m); coins.push({ m, x, y, z, active: true, back: 0, phase: rand() * 6 }); }
+function addCoin(x, y, z){ coins.push({ x, y, z, active: true, back: 0, phase: rand() * 6 }); }
+// all pickups are drawn as instances (two draw calls in total), updated every frame
+function mergeParts(parts){
+  const P = [], Nn = [], C = [], col = new THREE.Color();
+  parts.forEach(([geo, color]) => { const g = geo.index ? geo.toNonIndexed() : geo, p = g.attributes.position, n = g.attributes.normal; col.set(color);
+    for (let i = 0; i < p.count; i++) { P.push(p.getX(i), p.getY(i), p.getZ(i)); Nn.push(n.getX(i), n.getY(i), n.getZ(i)); C.push(col.r, col.g, col.b); } });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(Nn, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+  return g;
+}
+let pickupMeshes = [];
+function buildPickupMeshes(){
+  const n = coins.length;
+  if (PILL) {
+    const P = pillParts, oc = COIN_SETTINGS.outlineColor || '#1f4d3a';
+    const body = mergeParts([[P.capTop, COIN_SETTINGS.secondColor || '#f2f5f3'], [P.halfTop, COIN_SETTINGS.secondColor || '#f2f5f3'], [P.capBot, COIN_SETTINGS.color], [P.halfBot, COIN_SETTINGS.color], [P.bandGeo, oc], [P.shine, '#ffffff']]);
+    const outline = mergeParts([[P.oCyl, oc], [P.oTop, oc], [P.oBot, oc]]);
+    body.rotateZ(Math.PI / 4); outline.rotateZ(Math.PI / 4);
+    pickupMeshes = [
+      new THREE.InstancedMesh(body, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.3, metalness: 0.05, emissive: COIN_SETTINGS.glowColor, emissiveIntensity: 0.12 }), n),
+      new THREE.InstancedMesh(outline, new THREE.MeshBasicMaterial({ color: oc, side: THREE.BackSide }), n),
+    ];
+  } else pickupMeshes = [new THREE.InstancedMesh(coinGeo, coinMat, n)];
+  pickupMeshes.forEach(m => { m.castShadow = true; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(m); });
+}
+const pickO = new THREE.Object3D();
+function updatePickups(t){
+  coins.forEach((k, i) => {
+    pickO.position.set(k.x, k.y + Math.sin(t * 3 + k.phase) * 0.25, k.z);
+    pickO.rotation.set(0, t * COIN_SETTINGS.spinSpeed + k.phase, 0);
+    const sc = k.active ? 1 : 0; pickO.scale.set(sc, sc, sc); pickO.updateMatrix();
+    pickupMeshes.forEach(m => m.setMatrixAt(i, pickO.matrix));
+  });
+  pickupMeshes.forEach(m => { m.instanceMatrix.needsUpdate = true; });
+}
 const nearRamp = (x, z) => MAP.ramps.some(r => { const s = (x - r.x) * r.dx + (z - r.z) * r.dz, l = (x - r.x) * -r.dz + (z - r.z) * r.dx; return s > -6 && s < r.len + 48 && Math.abs(l) < r.w / 2 + 2; });
 (function placeCoins(){
   const step = Math.max(2, Math.round(COIN_SETTINGS.spacing / MAP.ds));
@@ -85,6 +130,9 @@ const nearRamp = (x, z) => MAP.ramps.some(r => { const s = (x - r.x) * r.dx + (z
     for (let t = 0.2; t < 0.8; t += 0.2) { const d = r.len + v * t, y = r.h + vy * t - 0.5 * GRAVITY * t * t + 1.3; addCoin(r.x + r.dx * d, y, r.z + r.dz * d); }
   });
 })();
+buildPickupMeshes();
+// instanced scenery is spread over the whole map, so never skip drawing it based on its origin
+scene.traverse(m => { if (m.isInstancedMesh) m.frustumCulled = false; });
 
 // ---------- cars ----------
 const carById = id => CARS.find(c => c.id === id) || CARS[0];
@@ -97,7 +145,7 @@ function setCarModel(c, id, paint, rimName){
   if (c.root) { scene.remove(c.root); scene.remove(c.shadow); }
   const spec = carById(id), m = buildCarModel(spec.id, paint, RIM_COLORS[rimName] || RIM_COLORS.Silver);
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body); body.add(m.group);
-  const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 20), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false }));
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 20), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.16, depthWrite: false }));
   shadow.rotation.x = -Math.PI / 2; shadow.scale.set(m.width * 0.62, m.length * 0.56, 1);
   scene.add(shadow); scene.add(root);
   Object.assign(c, { root, body, shadow, wheels: m.wheels, pivots: m.pivots, flames: m.flames, spec, color: paint });
@@ -372,7 +420,7 @@ function checkWrongWay(dt){
 let state = 'menu', raceTime = 0, countdown = 0, lastCount = 0;
 function resetRace(){
   racers.forEach(c => { placeOnGrid(c); c.topMul = c.skill; c.lapShown = 0; });
-  coins.forEach(k => { k.active = true; k.m.visible = true; });
+  coins.forEach(k => { k.active = true; });
   boostMeter = 0; totalCoins = 0; raceTime = 0; $('coinCount').textContent = '0';
   camH = player.h; camPos.set(player.x - Math.sin(camH) * 11, 5.2, player.z - Math.cos(camH) * 11);
 }
@@ -437,7 +485,7 @@ $('startBtn').addEventListener('click', openGarage);
 $('againBtn').addEventListener('click', startRace);
 
 // ---------- loop ----------
-let camH = 0, camY = 0, last = performance.now();
+let camH = 0, camY = 0, garageView = false, last = performance.now();
 const camPos = new THREE.Vector3();
 function frame(now){
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
@@ -466,9 +514,9 @@ function frame(now){
     racers.forEach(c => { updateProgress(c); if (!c.finished) checkLaps(c); });
     if (state === 'race') { checkWrongWay(dt); checkStuckHint(dt); }
     coins.forEach(k => {
-      if (!k.active) { if (raceTime > k.back) { k.active = true; k.m.visible = true; } return; }
+      if (!k.active) { if (raceTime > k.back) { k.active = true; } return; }
       if (Math.abs(k.y - (player.y + 1.3)) < 2.6 && Math.hypot(k.x - player.x, k.z - player.z) < 3) {
-        k.active = false; k.m.visible = false; k.back = raceTime + COIN_SETTINGS.respawnSeconds;
+        k.active = false; k.back = raceTime + COIN_SETTINGS.respawnSeconds;
         totalCoins++; boostMeter = Math.min(COIN_SETTINGS.coinsForFullBoost, boostMeter + COIN_SETTINGS.value);
         $('coinCount').textContent = totalCoins;
         const el = $('coins'); el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
@@ -478,7 +526,7 @@ function frame(now){
   }
 
   // visuals
-  coins.forEach(k => { if (k.active) { k.m.rotation.y = t * COIN_SETTINGS.spinSpeed + k.phase; k.m.position.y = k.y + Math.sin(t * 3 + k.phase) * 0.25; } });
+  updatePickups(t);
   racers.forEach(c => {
     c.root.position.set(c.x, c.y, c.z); c.root.rotation.y = c.h;
     c.shadow.position.set(c.x, 0.06, c.z); c.shadow.rotation.z = c.h;
@@ -492,11 +540,20 @@ function frame(now){
   // chase camera
   if (state === 'garage') {
     const a = t * 0.35 + 2.4;
-    camera.position.set(player.x + Math.sin(a) * 8, 3.4, player.z + Math.cos(a) * 8);
-    camera.lookAt(player.x, -1.1, player.z);   // aim below the car so it sits above the garage panel
+    // frame the car in the space above the garage panel
+    const card = document.querySelector('.garage-card').getBoundingClientRect(), side = card.right < innerWidth * 0.55 && card.height < innerHeight * 0.95;
+    const availW = side ? innerWidth - card.right : innerWidth, availH = side ? innerHeight : innerHeight - card.height - 16;
+    const dist = Math.max(9, 9 * 300 / Math.max(120, availH), 9 * 520 / Math.max(200, availW) * (innerHeight / Math.max(200, availH)) * 0.55);
+    camera.position.set(player.x + Math.sin(a) * dist, 3.2, player.z + Math.cos(a) * dist);
+    camera.lookAt(player.x, 0.7, player.z);
+    if (side) camera.setViewOffset(innerWidth, innerHeight, -card.right / 2, 0, innerWidth, innerHeight);
+    else camera.setViewOffset(innerWidth, innerHeight, 0, (card.height + 16) / 2, innerWidth, innerHeight);
+    garageView = true;
     if (Math.abs(camera.fov - 55) > 0.1) { camera.fov = 55; camera.updateProjectionMatrix(); }
+    MAP.sky.position.copy(camera.position); MAP.followSun(player.x, player.z);
     updateHud(); renderer.render(scene, camera); requestAnimationFrame(frame); return;
   }
+  if (garageView) { camera.clearViewOffset(); garageView = false; }
   camH += wrapAngle(player.h - camH) * Math.min(1, 5 * dt);
   const back = 11;
   camY += (player.y - camY) * Math.min(1, 10 * dt);   // camera rises with the car so it doesn't look like it shrinks
@@ -508,6 +565,7 @@ function frame(now){
   const fov = player.boosting ? 76 : 70;
   if (Math.abs(camera.fov - fov) > 0.1) { camera.fov += (fov - camera.fov) * Math.min(1, 4 * dt); camera.updateProjectionMatrix(); }
 
+  MAP.sky.position.copy(camera.position); MAP.followSun(player.x, player.z);
   updateHud();
   renderer.render(scene, camera);
   requestAnimationFrame(frame);

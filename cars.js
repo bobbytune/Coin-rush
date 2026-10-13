@@ -50,60 +50,93 @@ const CAR_MODELS = {
 function buildCarModel(modelId, paint, rimColor){
   const M = CAR_MODELS[modelId] || CAR_MODELS.furia;
   const group = new THREE.Group();
-  const paintMat = new THREE.MeshStandardMaterial({ color: paint, metalness: 0.25, roughness: 0.28 });
-  const glass = new THREE.MeshStandardMaterial({ color: '#1b2333', metalness: 0.6, roughness: 0.12 });
+  const env = (typeof window !== 'undefined' && window.CAR_ENV) || null;
+  const paintMat = new THREE.MeshStandardMaterial({ color: paint, metalness: 0.35, roughness: 0.22, envMap: env, envMapIntensity: 0.9 });
+  const glass = new THREE.MeshStandardMaterial({ color: '#1b2333', metalness: 0.7, roughness: 0.08, envMap: env, envMapIntensity: 1.2 });
   const trim = new THREE.MeshStandardMaterial({ color: '#16161d', metalness: 0.2, roughness: 0.6 });
   const head = new THREE.MeshStandardMaterial({ color: '#fff6d5', emissive: '#fff1b8', emissiveIntensity: 0.9 });
   const tail = new THREE.MeshStandardMaterial({ color: '#ff2a2a', emissive: '#ff1a1a', emissiveIntensity: 0.8 });
-  const rim = new THREE.MeshStandardMaterial({ color: rimColor || '#c9ced6', metalness: 0.8, roughness: 0.25 });
+  const rim = new THREE.MeshStandardMaterial({ color: rimColor || '#c9ced6', metalness: 0.85, roughness: 0.22, envMap: env, envMapIntensity: 1 });
   const W = M.width, L = M.length;
   const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x || 0, y || 0, z || 0); group.add(m); return m; };
   const boxG = (w, h, d) => new THREE.BoxGeometry(w, h, d);
 
-  function extrude(points, width, bevel = 0.03){
-    const sh = new THREE.Shape(); points.forEach(([u, v], i) => (i ? sh.lineTo(u, v) : sh.moveTo(u, v)));
-    const depth = Math.max(0.05, width - bevel * 2);
-    const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: bevel > 0, bevelSize: bevel, bevelThickness: bevel, bevelSegments: 2 });
-    g.translate(0, 0, -depth / 2); g.rotateY(-Math.PI / 2); g.computeVertexNormals();
+  // round off the corners of a side profile so bodies look sculpted rather than boxy
+  function smoothProfile(points, n = 72){
+    const curve = new THREE.CatmullRomCurve3(points.map(([u, v]) => new THREE.Vector3(u, v, 0)), true, 'centripetal');
+    return curve.getSpacedPoints(n).slice(0, -1).map(p => [p.x, p.y]);
+  }
+  // smooth shading across gentle curves, sharp creases where faces meet at a hard angle
+  function smoothNormals(g, creaseDeg = 45){
+    const p = g.attributes.position, n = p.count, fn = new Float32Array(n * 3), groups = new Map(), cos = Math.cos(creaseDeg * Math.PI / 180);
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    for (let i = 0; i < n; i += 3) {
+      a.fromBufferAttribute(p, i); b.fromBufferAttribute(p, i + 1); c.fromBufferAttribute(p, i + 2);
+      const f = c.sub(b).cross(a.sub(b)).normalize();
+      for (let k = 0; k < 3; k++) { fn[(i + k) * 3] = f.x; fn[(i + k) * 3 + 1] = f.y; fn[(i + k) * 3 + 2] = f.z; }
+    }
+    for (let i = 0; i < n; i++) { const key = `${Math.round(p.getX(i) * 1000)},${Math.round(p.getY(i) * 1000)},${Math.round(p.getZ(i) * 1000)}`; (groups.get(key) || groups.set(key, []).get(key)).push(i); }
+    const out = new Float32Array(n * 3);
+    groups.forEach(ids => ids.forEach(i => {
+      let x = 0, y = 0, z = 0;
+      ids.forEach(j => { const d = fn[i * 3] * fn[j * 3] + fn[i * 3 + 1] * fn[j * 3 + 1] + fn[i * 3 + 2] * fn[j * 3 + 2]; if (d > cos) { x += fn[j * 3]; y += fn[j * 3 + 1]; z += fn[j * 3 + 2]; } });
+      const l = Math.hypot(x, y, z) || 1; out[i * 3] = x / l; out[i * 3 + 1] = y / l; out[i * 3 + 2] = z / l;
+    }));
+    g.setAttribute('normal', new THREE.BufferAttribute(out, 3));
     return g;
   }
-  add(extrude(M.body, W), paintMat);
+  function extrude(points, width, bevel = 0.03, segs = 2){
+    const sh = new THREE.Shape(); points.forEach(([u, v], i) => (i ? sh.lineTo(u, v) : sh.moveTo(u, v)));
+    const depth = Math.max(0.05, width - bevel * 2);
+    let g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: bevel > 0, bevelSize: bevel * 0.8, bevelThickness: bevel, bevelSegments: segs, curveSegments: 4 });
+    if (g.index) g = g.toNonIndexed();
+    g.translate(0, 0, -depth / 2); g.rotateY(-Math.PI / 2);
+    return smoothNormals(g);
+  }
+  add(extrude(smoothProfile(M.body), W, 0.16, 4), paintMat);
   if (M.cabin) {
-    add(extrude(M.cabin, M.cabinWidth, 0), glass);
-    // painted roof panel along the top of the cabin
-    const top = M.cabin.filter(p => p[1] > Math.max(...M.cabin.map(q => q[1])) - 0.05);
-    if (top.length >= 2) {
-      const z1 = Math.max(...top.map(p => p[0])), z2 = Math.min(...top.map(p => p[0])), y = top[0][1];
-      add(boxG(M.cabinWidth + 0.04, 0.08, (z1 - z2) + 0.12), paintMat, 0, y + 0.02, (z1 + z2) / 2);   // overlaps the glass so the two never flicker
-    }
+    // painted cabin with glass side windows, windscreen and rear window
+    add(extrude(M.cabin, M.cabinWidth, 0.08, 3), paintMat);
+    const cu = M.cabin.reduce((s, p) => s + p[0], 0) / M.cabin.length, cv = M.cabin.reduce((s, p) => s + p[1], 0) / M.cabin.length;
+    const side = M.cabin.map(([u, v]) => [cu + (u - cu) * 0.8, cv + (v - cv) * 0.72 + 0.04]);
+    add(extrude(side, M.cabinWidth + 0.03, 0), glass);
+    const pane = (p1, p2) => {
+      const du = p2[0] - p1[0], dv = p2[1] - p1[1], len = Math.hypot(du, dv), nu = dv / len, nv = -du / len;
+      const outward = (p1[0] + p2[0]) / 2 - cu > 0 ? 1 : -1, sgn = Math.sign(nu) === outward ? 1 : -1;
+      const m = add(boxG(M.cabinWidth * 0.84, 0.04, len * 0.86), glass, 0, (p1[1] + p2[1]) / 2 + nv * sgn * 0.09, (p1[0] + p2[0]) / 2 + nu * sgn * 0.09);
+      m.rotation.x = -Math.atan2(dv, du);
+    };
+    pane(M.cabin[0], M.cabin[1]);
+    pane(M.cabin[M.cabin.length - 2], M.cabin[M.cabin.length - 1]);
   }
   // underside / sills so there is no gap above the road
   add(boxG(W - 0.2, 0.2, L - 0.6), trim, 0, 0.3, 0);
 
   const frontZ = Math.max(...M.body.map(p => p[0])), rearZ = Math.min(...M.body.map(p => p[0]));
   const frontY = M.body.find(p => p[0] === frontZ)[1];
+  const fz = frontZ + 0.13, rz = rearZ - 0.13;   // the rounded body edge sits a little outside the profile points
   const ex = new Set(M.extras);
   // lights
   if (ex.has('roundLights')) {
     [-1, 1].forEach(s => {
-      const hl = add(new THREE.CylinderGeometry(0.17, 0.17, 0.08, 14), head, s * (W / 2 - 0.4), frontY + 0.12, frontZ + 0.02); hl.rotation.x = Math.PI / 2;
-      add(boxG(0.45, 0.22, 0.06), tail, s * (W / 2 - 0.4), 0.75, rearZ - 0.02);
+      const hl = add(new THREE.CylinderGeometry(0.17, 0.17, 0.08, 14), head, s * (W / 2 - 0.4), frontY + 0.12, fz + 0.02); hl.rotation.x = Math.PI / 2;
+      add(boxG(0.45, 0.22, 0.06), tail, s * (W / 2 - 0.4), 0.75, rz - 0.02);
     });
   } else {
-    [-1, 1].forEach(s => { const hl = add(boxG(0.55, 0.1, 0.25), head, s * (W / 2 - 0.42), frontY + 0.1, frontZ - 0.08); hl.rotation.x = -0.35; });
+    [-1, 1].forEach(s => { const hl = add(boxG(0.55, 0.1, 0.25), head, s * (W / 2 - 0.42), frontY + 0.1, fz - 0.08); hl.rotation.x = -0.35; });
   }
-  if (ex.has('lightbar')) add(boxG(W - 0.3, 0.1, 0.06), tail, 0, 0.82, rearZ - 0.02);
-  if (ex.has('quadLights')) [-0.78, -0.45, 0.45, 0.78].forEach(x => { const t = add(new THREE.CylinderGeometry(0.13, 0.13, 0.06, 14), tail, x, 0.8, rearZ - 0.02); t.rotation.x = Math.PI / 2; });
+  if (ex.has('lightbar')) add(boxG(W - 0.3, 0.1, 0.06), tail, 0, 0.82, rz - 0.02);
+  if (ex.has('quadLights')) [-0.78, -0.45, 0.45, 0.78].forEach(x => { const t = add(new THREE.CylinderGeometry(0.13, 0.13, 0.06, 14), tail, x, 0.8, rz - 0.02); t.rotation.x = Math.PI / 2; });
   // body details
-  if (ex.has('splitter')) add(boxG(W - 0.1, 0.06, 0.4), trim, 0, 0.36, frontZ - 0.1);
+  if (ex.has('splitter')) add(boxG(W - 0.1, 0.06, 0.4), trim, 0, 0.36, fz - 0.1);
   if (ex.has('intakes')) [-1, 1].forEach(s => add(boxG(0.06, 0.32, 0.9), trim, s * (W / 2 + 0.04), 0.72, -0.55));
   if (ex.has('vents')) [-1, 1].forEach(s => add(boxG(0.06, 0.18, 0.5), trim, s * (W / 2 + 0.04), 0.75, 1.0));
-  if (ex.has('lowWing')) { add(boxG(W - 0.3, 0.06, 0.4), trim, 0, 1.2, rearZ + 0.35); [-0.7, 0.7].forEach(x => add(boxG(0.08, 0.18, 0.2), trim, x, 1.09, rearZ + 0.35)); }
+  if (ex.has('lowWing')) { add(boxG(W - 0.3, 0.06, 0.4), trim, 0, 1.2, rz + 0.35); [-0.7, 0.7].forEach(x => add(boxG(0.08, 0.18, 0.2), trim, x, 1.09, rz + 0.35)); }
   if (ex.has('bigWing')) {
-    add(boxG(W + 0.1, 0.07, 0.5), paintMat, 0, 1.5, rearZ + 0.32);
-    [-1, 1].forEach(s => { add(boxG(0.08, 0.5, 0.3), trim, s * 0.75, 1.24, rearZ + 0.32); add(boxG(0.05, 0.3, 0.55), trim, s * (W / 2 + 0.07), 1.46, rearZ + 0.32); });
+    add(boxG(W + 0.1, 0.07, 0.5), paintMat, 0, 1.5, rz + 0.32);
+    [-1, 1].forEach(s => { add(boxG(0.08, 0.5, 0.3), trim, s * 0.75, 1.24, rz + 0.32); add(boxG(0.05, 0.3, 0.55), trim, s * (W / 2 + 0.07), 1.46, rz + 0.32); });
   }
-  if (ex.has('ducktail')) add(boxG(W - 0.2, 0.12, 0.35), paintMat, 0, 1.1, rearZ + 0.25);
+  if (ex.has('ducktail')) add(boxG(W - 0.2, 0.12, 0.35), paintMat, 0, 1.1, rz + 0.25);
   if (ex.has('roofWing')) add(boxG(1.75, 0.08, 0.45), paintMat, 0, 1.76, -1.75);
   if (ex.has('scoop')) add(boxG(0.7, 0.22, 1.0), trim, 0, 1.12, 1.4);
   if (ex.has('stripes')) [-0.28, 0.28].forEach(x => add(boxG(0.3, 0.02, L - 0.4), new THREE.MeshStandardMaterial({ color: '#f4f1de', roughness: 0.4 }), x, 1.085, 0));
@@ -113,7 +146,7 @@ function buildCarModel(modelId, paint, rimColor){
     add(boxG(1.62, 0.12, 0.12), tube, 0, 1.95, 0.6); add(boxG(1.62, 0.12, 0.12), tube, 0, 1.95, -0.9);
     [-0.75, 0.75].forEach(x => add(boxG(0.12, 0.12, 1.62), tube, x, 1.95, -0.15));
     add(boxG(1.0, 0.5, 0.7), trim, 0, 1.2, -0.3);
-    add(boxG(W - 0.2, 0.14, 0.14), tube, 0, 0.7, frontZ + 0.1);
+    add(boxG(W - 0.2, 0.14, 0.14), tube, 0, 0.7, fz + 0.1);
   }
   if (ex.has('vanGlass')) {
     add(extrude([[2.28, 1.24], [1.52, 2.32], [1.32, 2.32], [1.32, 1.24]], W + 0.02, 0), glass);
@@ -127,15 +160,17 @@ function buildCarModel(modelId, paint, rimColor){
   [[-Wh.x, Wh.front, Wh.rFront], [Wh.x, Wh.front, Wh.rFront], [-Wh.x, Wh.rear, Wh.rRear], [Wh.x, Wh.rear, Wh.rRear]].forEach(([x, z, r], i) => {
     const pivot = new THREE.Group(); pivot.position.set(x, r, z); group.add(pivot);
     const spin = new THREE.Group(); pivot.add(spin);
-    const tyre = new THREE.Mesh(new THREE.CylinderGeometry(r, r, Wh.width, 20).rotateZ(Math.PI / 2), trim); spin.add(tyre);
+    const tyre = new THREE.Mesh(new THREE.CylinderGeometry(r, r, Wh.width, 28).rotateZ(Math.PI / 2), trim); spin.add(tyre);
+    [-1, 1].forEach(e => { const lip = new THREE.Mesh(new THREE.TorusGeometry(r * 0.94, Wh.width * 0.16, 8, 28).rotateY(Math.PI / 2), trim); lip.position.x = e * Wh.width * 0.42; spin.add(lip); });
     const side = x > 0 ? 1 : -1;
     const disc = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.62, r * 0.62, 0.04, 16).rotateZ(Math.PI / 2), rim); disc.position.x = side * (Wh.width / 2 + 0.01); spin.add(disc);
-    [0, Math.PI / 3, -Math.PI / 3].forEach(a => { const sp = new THREE.Mesh(boxG(0.05, r * 1.15, 0.1), rim); sp.rotation.x = a; sp.position.x = side * (Wh.width / 2 + 0.03); spin.add(sp); });
+    [0, Math.PI / 5, 2 * Math.PI / 5, 3 * Math.PI / 5, 4 * Math.PI / 5].forEach(a => { const sp = new THREE.Mesh(boxG(0.05, r * 1.15, 0.1), rim); sp.rotation.x = a; sp.position.x = side * (Wh.width / 2 + 0.03); spin.add(sp); });
     wheels.push({ spin, r }); if (i < 2) pivots.push(pivot);
   });
 
   const flameGeo = new THREE.ConeGeometry(0.32, 2, 10); flameGeo.rotateX(-Math.PI / 2);
   const flameMat = new THREE.MeshBasicMaterial({ color: '#ffb703', transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
-  const flames = [-0.55, 0.55].map(x => { const f = new THREE.Mesh(flameGeo, flameMat); f.position.set(x, 0.55, rearZ - 1.0); f.visible = false; group.add(f); return f; });
+  const flames = [-0.55, 0.55].map(x => { const f = new THREE.Mesh(flameGeo, flameMat); f.position.set(x, 0.55, rz - 1.0); f.visible = false; group.add(f); return f; });
+  group.traverse(m => { if (m.isMesh && m.material !== flameMat) m.castShadow = true; });
   return { group, wheels, pivots, flames, length: L, width: W };
 }
