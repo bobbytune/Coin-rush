@@ -69,7 +69,7 @@ tr.me td{color:var(--mint)}
 /* garage */
 .in-garage .hud{visibility:hidden}
 .in-garage #touch{visibility:hidden}
-#garage{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;justify-content:center;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));pointer-events:none}
+#garage,#driverSelect{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;justify-content:center;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));pointer-events:none}
 .garage-card{pointer-events:auto;width:min(460px,100%);padding:18px 20px;display:flex;flex-direction:column;gap:12px}
 .garage-card p{margin:0}
 .g-head{display:flex;align-items:center;gap:12px}
@@ -92,4 +92,5 @@ tr.me td{color:var(--mint)}
 .btn-row .go{flex:1;width:auto;min-width:140px}
 .go.alt{background:rgba(255,255,255,.12);color:var(--text);box-shadow:0 4px 0 rgba(0,0,0,.35)}
 @media (max-width:560px){.garage-card{padding:14px;gap:9px}.garage-card p{font-size:14px}}
-@media (min-width:900px){#garage{top:0;right:auto;align-items:center;padding-left:28px}.garage-card{width:420px}}
+@media (min-width:900px){#garage,#driverSelect{top:0;right:auto;align-items:center;padding-left:28px}.garage-card{width:420px}}
+.garage-card .hint{font-size:13px;color:var(--muted);opacity:.85}

@@ -37,6 +37,7 @@ const CAR_MODELS = {
     cabin: null,
     wheels: { front: 1.3, rear: -1.3, x: 1.25, rFront: 0.68, rRear: 0.78, width: 0.6 },
     extras: ['cage', 'roundLights'],
+    seat: -0.35,       // where the driver sits (forward position); shown because the buggy is open
   },
   hauler: {  // van
     length: 4.9, width: 2.4,
@@ -46,6 +47,9 @@ const CAR_MODELS = {
     extras: ['vanGlass', 'roofRack', 'roundLights'],
   },
 };
+// open-top versions: same bodies, no roof, so you can see your driver
+CAR_MODELS.spyder = Object.assign({}, CAR_MODELS.furia, { cabin: null, open: true, seat: -0.45, extras: ['intakes', 'lightbar', 'lowWing', 'splitter', 'fairing'] });
+CAR_MODELS.dropTop = Object.assign({}, CAR_MODELS.bruiser, { cabin: null, open: true, seat: -0.35, extras: ['stripes', 'scoop', 'ducktail', 'roundLights'] });
 
 function buildCarModel(modelId, paint, rimColor){
   const M = CAR_MODELS[modelId] || CAR_MODELS.furia;
@@ -145,7 +149,6 @@ function buildCarModel(modelId, paint, rimColor){
     [[-0.75, 0.6], [0.75, 0.6], [-0.75, -0.9], [0.75, -0.9]].forEach(([x, z]) => add(boxG(0.12, 1.0, 0.12), tube, x, 1.45, z));
     add(boxG(1.62, 0.12, 0.12), tube, 0, 1.95, 0.6); add(boxG(1.62, 0.12, 0.12), tube, 0, 1.95, -0.9);
     [-0.75, 0.75].forEach(x => add(boxG(0.12, 0.12, 1.62), tube, x, 1.95, -0.15));
-    add(boxG(1.0, 0.5, 0.7), trim, 0, 1.2, -0.3);
     add(boxG(W - 0.2, 0.14, 0.14), tube, 0, 0.7, fz + 0.1);
   }
   if (ex.has('vanGlass')) {
@@ -153,6 +156,27 @@ function buildCarModel(modelId, paint, rimColor){
     [-1, 1].forEach(s => add(boxG(0.04, 0.6, 1.6), glass, s * (W / 2 + 0.02), 1.85, 0.2));
   }
   if (ex.has('roofRack')) { [-0.9, 0.9].forEach(x => add(boxG(0.08, 0.1, 3.4), trim, x, 2.5, -0.5)); [-1.6, -0.5, 0.6].forEach(z => add(boxG(1.9, 0.06, 0.08), trim, 0, 2.52, z)); }
+
+  // open cockpit: dark interior, seat, windscreen and steering wheel; the driver goes on the seat
+  let seat = null;
+  if (M.seat !== undefined) {
+    const sz = M.seat;
+    let top = 0;   // height of the body's top edge at the seat
+    for (let i = 0; i < M.body.length; i++) { const a = M.body[i], b = M.body[(i + 1) % M.body.length];
+      if ((a[0] - sz) * (b[0] - sz) <= 0 && a[0] !== b[0]) top = Math.max(top, a[1] + (b[1] - a[1]) * (sz - a[0]) / (b[0] - a[0])); }
+    top += 0.13;
+    const interior = new THREE.MeshStandardMaterial({ color: '#2a2a33', roughness: 0.8 });
+    if (M.open) {
+      add(boxG(W * 0.72, 0.03, 1.9), interior, 0, top + 0.005, sz + 0.15);
+      const ws = add(boxG(W * 0.74, 0.03, 0.62), glass, 0, top + 0.24, sz + 1.12); ws.rotation.x = -1.0;
+      add(boxG(W * 0.76, 0.05, 0.05), trim, 0, top + 0.47, sz + 0.97);
+    }
+    const back = add(boxG(0.62, 0.62, 0.14), interior, 0, top + 0.12, sz - 0.3); back.rotation.x = -0.12;
+    add(boxG(0.4, 0.22, 0.12), interior, 0, top + 0.5, sz - 0.34);
+    const wheelR = add(new THREE.TorusGeometry(0.17, 0.03, 8, 20), trim, 0, top + 0.12, sz + 0.52); wheelR.rotation.x = -0.4;
+    if (ex.has('fairing')) { const f = add(new THREE.SphereGeometry(0.34, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), paintMat, 0, top - 0.02, sz - 0.62); f.scale.set(1.1, 1.1, 2.2); }
+    seat = { x: 0, y: top - 0.34, z: sz };
+  }
 
   // wheels: tyre + rim + spokes so you can see them spin
   const wheels = [], pivots = [];
@@ -172,5 +196,5 @@ function buildCarModel(modelId, paint, rimColor){
   const flameMat = new THREE.MeshBasicMaterial({ color: '#ffb703', transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
   const flames = [-0.55, 0.55].map(x => { const f = new THREE.Mesh(flameGeo, flameMat); f.position.set(x, 0.55, rz - 1.0); f.visible = false; group.add(f); return f; });
   group.traverse(m => { if (m.isMesh && m.material !== flameMat) m.castShadow = true; });
-  return { group, wheels, pivots, flames, length: L, width: W };
+  return { group, wheels, pivots, flames, length: L, width: W, seat };
 }

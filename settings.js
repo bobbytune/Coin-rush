@@ -32,8 +32,10 @@ const RACERS = [
 // weight = how hard it shoves other cars, boost = boost strength. offroad: true = less slowdown on grass and dirt.
 const CARS = [
   { id: 'furia',   name: 'Furia V12',   blurb: 'Italian-style wedge supercar. Blistering top speed, twitchy in the bends.', speed: 1.12, accel: 1.06, handling: 0.94, weight: 0.95, boost: 1.0 },
+  { id: 'spyder',  name: 'Furia Spyder', blurb: 'The Furia with the roof chopped off. Lighter, sharper, and everyone can see you.', speed: 1.1, accel: 1.08, handling: 1.0, weight: 0.9, boost: 1.0 },
   { id: 'raijin',  name: 'Raijin GT',   blurb: 'Japanese grand tourer. Grips like glue and launches hard.',                speed: 1.05, accel: 1.12, handling: 1.1,  weight: 1.1,  boost: 1.0 },
   { id: 'bruiser', name: 'Bruiser 69',  blurb: 'Old-school muscle. Huge grunt, heavy, slides wide.',                        speed: 1.08, accel: 1.1,  handling: 0.86, weight: 1.35, boost: 1.1 },
+  { id: 'dropTop', name: 'Bruiser Drop-Top', blurb: 'Convertible muscle. All the grunt, plus the wind in your hair.', speed: 1.06, accel: 1.1, handling: 0.9, weight: 1.25, boost: 1.1 },
   { id: 'zippy',   name: 'Zippy R',     blurb: 'Hot hatch. Not the fastest, but it turns on a penny.',                       speed: 0.96, accel: 1.06, handling: 1.18, weight: 0.85, boost: 1.15 },
   { id: 'dune',    name: 'Sand Flea',   blurb: 'Dune buggy. Barely slows down on grass and dirt shortcuts.',                 speed: 0.95, accel: 1.12, handling: 1.08, weight: 0.85, boost: 1.0, offroad: true },
   { id: 'hauler',  name: 'Hauler',      blurb: 'Delivery van. Slow, but nothing pushes it around.',                          speed: 0.92, accel: 0.9,  handling: 0.92, weight: 1.7,  boost: 1.2 },

@@ -138,16 +138,19 @@ scene.traverse(m => { if (m.isInstancedMesh) m.frustumCulled = false; });
 const carById = id => CARS.find(c => c.id === id) || CARS[0];
 function loadPref(key, fallback){ try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; } }
 function savePref(key, v){ try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) {} }
-const myCar = Object.assign({ id: CARS[0].id, paint: (RACERS.find(r => r.player) || {}).color || PAINT_COLORS[0], rim: 'Silver' }, loadPref('coinrush-car', {}));
+const myCar = Object.assign({ id: CARS[0].id, paint: (RACERS.find(r => r.player) || {}).color || PAINT_COLORS[0], rim: 'Silver', driver: CHARACTERS[0].id }, loadPref('coinrush-car', {}));
+if (!CHARACTERS.some(c => c.id === myCar.driver)) myCar.driver = CHARACTERS[0].id;
+const charById = id => CHARACTERS.find(c => c.id === id) || CHARACTERS[0];
 if (!CARS.some(c => c.id === myCar.id)) myCar.id = CARS[0].id;
 if (!RIM_COLORS[myCar.rim]) myCar.rim = 'Silver';
-function setCarModel(c, id, paint, rimName){
+function setCarModel(c, id, paint, rimName, driverId){
   if (c.root) { scene.remove(c.root); scene.remove(c.shadow); }
   const spec = carById(id), m = buildCarModel(spec.id, paint, RIM_COLORS[rimName] || RIM_COLORS.Silver);
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body); body.add(m.group);
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 20), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.16, depthWrite: false }));
   shadow.rotation.x = -Math.PI / 2; shadow.scale.set(m.width * 0.62, m.length * 0.56, 1);
   scene.add(shadow); scene.add(root);
+  if (m.seat) { const d = buildCharacter(driverId || c.driver || CHARACTERS[0].id, 'seated', paint); d.position.set(m.seat.x, m.seat.y, m.seat.z); m.group.add(d); }
   Object.assign(c, { root, body, shadow, wheels: m.wheels, pivots: m.pivots, flames: m.flames, spec, color: paint });
 }
 const racers = RACERS.map((r, i) => ({ name: r.name, color: r.color, baseColor: r.color, player: !!r.player, skill: r.skill || 1, slot: i, lane: (i % 2 ? 4 : -4) + (rand() - 0.5) * 2 }));
@@ -155,7 +158,14 @@ const player = racers.find(r => r.player);
 function assignCars(){
   const pool = CARS.filter(c => c.id !== myCar.id), order = (pool.length ? pool : CARS).slice().sort(() => rand() - 0.5);
   let k = 0;
-  racers.forEach(c => { if (c.player) setCarModel(c, myCar.id, myCar.paint, myCar.rim); else setCarModel(c, order[k++ % order.length].id, c.baseColor, 'Silver'); });
+  const drivers = CHARACTERS.filter(ch => ch.id !== myCar.driver).sort(() => rand() - 0.5);
+  let dk = 0;
+  racers.forEach(c => {
+    if (c.player) { c.driver = myCar.driver; setCarModel(c, myCar.id, myCar.paint, myCar.rim, myCar.driver); return; }
+    const d = drivers.length ? drivers[dk++ % drivers.length] : CHARACTERS[0];
+    c.driver = d.id; if (CHARACTERS.length > 1) c.name = d.name;
+    setCarModel(c, order[k++ % order.length].id, c.baseColor, 'Silver', d.id);
+  });
 }
 assignCars();
 
@@ -428,22 +438,57 @@ function startRace(){
   if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
   savePref('coinrush-car', myCar);
   assignCars(); resetRace();
-  $('menu').hidden = true; $('results').hidden = true; $('garage').hidden = true; document.body.classList.remove('in-garage');
+  $('menu').hidden = true; $('results').hidden = true; $('garage').hidden = true; $('driverSelect').hidden = true; document.body.classList.remove('in-garage');
+  if (driverPreview) { scene.remove(driverPreview); driverPreview = null; }
   state = 'countdown'; countdown = 3.5; lastCount = 0;
 }
 
 // ---------- garage ----------
+// ---------- driver select ----------
+let driverPreview = null;
+function showDriverPreview(){
+  if (driverPreview) scene.remove(driverPreview);
+  driverPreview = buildCharacter(myCar.driver, 'standing'); driverPreview.scale.setScalar(1.6);
+  driverPreview.position.set(player.x, 0, player.z); driverPreview.rotation.y = player.h; scene.add(driverPreview);
+}
+function openDriver(){
+  state = 'driver';
+  $('menu').hidden = true; $('results').hidden = true; $('garage').hidden = true; $('driverSelect').hidden = false; document.body.classList.add('in-garage');
+  resetRace();
+  racers.forEach(c => { c.root.visible = false; c.shadow.visible = false; });
+  showDriverPreview(); updateDriver(); $('toCarBtn').focus();
+}
+function stepDriver(dir){
+  const i = CHARACTERS.findIndex(c => c.id === myCar.driver);
+  myCar.driver = CHARACTERS[(i + dir + CHARACTERS.length) % CHARACTERS.length].id;
+  showDriverPreview(); updateDriver();
+}
+function updateDriver(){
+  const ch = charById(myCar.driver), i = CHARACTERS.indexOf(ch);
+  $('drvIndex').textContent = `${i + 1} / ${CHARACTERS.length}`; $('drvName').textContent = ch.name; $('drvBlurb').textContent = ch.blurb;
+}
+$('prevDrv').addEventListener('click', () => stepDriver(-1));
+$('nextDrv').addEventListener('click', () => stepDriver(1));
+$('toCarBtn').addEventListener('click', openGarage);
+$('changeDriverBtn').addEventListener('click', openDriver);
+addEventListener('keydown', e => {
+  if (state !== 'driver') return;
+  if (e.code === 'ArrowLeft' || e.code === 'KeyA') stepDriver(-1);
+  if (e.code === 'ArrowRight' || e.code === 'KeyD') stepDriver(1);
+});
+
 function openGarage(){
   state = 'garage';
-  $('menu').hidden = true; $('results').hidden = true; $('garage').hidden = false; document.body.classList.add('in-garage');
-  setCarModel(player, myCar.id, myCar.paint, myCar.rim); resetRace();
-  racers.forEach(c => { if (!c.player) { c.root.visible = false; c.shadow.visible = false; } });
+  if (driverPreview) { scene.remove(driverPreview); driverPreview = null; }
+  $('menu').hidden = true; $('results').hidden = true; $('driverSelect').hidden = true; $('garage').hidden = false; document.body.classList.add('in-garage');
+  setCarModel(player, myCar.id, myCar.paint, myCar.rim, myCar.driver); resetRace();
+  racers.forEach(c => { const v = c.player; c.root.visible = v; c.shadow.visible = v; });
   updateGarage(); $('raceBtn').focus();
 }
 function stepCar(dir){
   const i = CARS.findIndex(c => c.id === myCar.id);
   myCar.id = CARS[(i + dir + CARS.length) % CARS.length].id;
-  setCarModel(player, myCar.id, myCar.paint, myCar.rim); placeOnGrid(player); updateGarage();
+  setCarModel(player, myCar.id, myCar.paint, myCar.rim, myCar.driver); placeOnGrid(player); updateGarage();
 }
 const STAT_ROWS = [['Top speed', 'speed', 0.85, 1.2], ['Acceleration', 'accel', 0.85, 1.2], ['Handling', 'handling', 0.8, 1.25], ['Weight', 'weight', 0.7, 1.8], ['Boost', 'boost', 0.9, 1.25]];
 function updateGarage(){
@@ -458,8 +503,8 @@ function updateGarage(){
   $('paints').innerHTML = PAINT_COLORS.map(c => `<button class="swatch${c === myCar.paint ? ' on' : ''}" data-paint="${c}" style="background:${c}" aria-label="Paint ${c}"></button>`).join('');
   $('rims').innerHTML = Object.entries(RIM_COLORS).map(([n, c]) => `<button class="swatch rim${n === myCar.rim ? ' on' : ''}" data-rim="${n}" style="background:${c}" aria-label="${n} wheels" title="${n}"></button>`).join('');
 }
-$('paints').addEventListener('click', e => { const b = e.target.closest('[data-paint]'); if (!b) return; myCar.paint = b.dataset.paint; setCarModel(player, myCar.id, myCar.paint, myCar.rim); updateGarage(); });
-$('rims').addEventListener('click', e => { const b = e.target.closest('[data-rim]'); if (!b) return; myCar.rim = b.dataset.rim; setCarModel(player, myCar.id, myCar.paint, myCar.rim); updateGarage(); });
+$('paints').addEventListener('click', e => { const b = e.target.closest('[data-paint]'); if (!b) return; myCar.paint = b.dataset.paint; setCarModel(player, myCar.id, myCar.paint, myCar.rim, myCar.driver); updateGarage(); });
+$('rims').addEventListener('click', e => { const b = e.target.closest('[data-rim]'); if (!b) return; myCar.rim = b.dataset.rim; setCarModel(player, myCar.id, myCar.paint, myCar.rim, myCar.driver); updateGarage(); });
 $('prevCar').addEventListener('click', () => stepCar(-1));
 $('nextCar').addEventListener('click', () => stepCar(1));
 $('raceBtn').addEventListener('click', startRace);
@@ -476,12 +521,14 @@ function finishRace(){
     const order = racers.slice().sort((a, b) => progress(b) - progress(a));
     $('resTitle').textContent = player.place === 1 ? '1st place!' : ord(player.place) + ' place';
     $('resSub').textContent = `Finished in ${fmt(player.finishTime)} with ${totalCoins} ${COIN_SETTINGS.name || 'pickups'} collected.`;
-    $('resTable').innerHTML = order.map((c, i) => `<tr class="${c.player ? 'me' : ''}"><td>${ord(i + 1)}</td><td><span class="dot" style="background:${c.color}"></span>${c.name}</td><td>${c.finished ? fmt(c.finishTime) : 'Still racing'}</td></tr>`).join('');
+    $('resTable').innerHTML = order.map((c, i) => `<tr class="${c.player ? 'me' : ''}"><td>${ord(i + 1)}</td><td><span class="dot" style="background:${c.color}"></span>${c.player && PICK_DRIVER ? `You <small style="opacity:.7">(${charById(c.driver).name})</small>` : c.name}</td><td>${c.finished ? fmt(c.finishTime) : 'Still racing'}</td></tr>`).join('');
     $('results').hidden = false; $('againBtn').focus();
   }, 1600);
   showMsg(player.place === 1 ? 'Winner!' : 'Finish!', 1600);
 }
-$('startBtn').addEventListener('click', openGarage);
+const PICK_DRIVER = CHARACTERS.length > 1;   // only show the driver screen once there's more than one character
+if (!PICK_DRIVER) $('changeDriverBtn').hidden = true;
+$('startBtn').addEventListener('click', () => (PICK_DRIVER ? openDriver() : openGarage()));
 $('againBtn').addEventListener('click', startRace);
 
 // ---------- loop ----------
@@ -538,14 +585,15 @@ function frame(now){
   });
 
   // chase camera
-  if (state === 'garage') {
-    const a = t * 0.35 + 2.4;
-    // frame the car in the space above the garage panel
-    const card = document.querySelector('.garage-card').getBoundingClientRect(), side = card.right < innerWidth * 0.55 && card.height < innerHeight * 0.95;
+  if (state === 'garage' || state === 'driver') {
+    const drv = state === 'driver', a = drv ? player.h + Math.sin(t * 0.6) * 0.7 : t * 0.35 + 2.4;
+    if (drv && driverPreview) driverPreview.rotation.y = player.h + Math.sin(t * 0.8) * 0.5;
+    // frame the car (or driver) in the space beside or above the panel
+    const card = document.querySelector(drv ? '#driverSelect .garage-card' : '#garage .garage-card').getBoundingClientRect(), side = card.right < innerWidth * 0.55 && card.height < innerHeight * 0.95;
     const availW = side ? innerWidth - card.right : innerWidth, availH = side ? innerHeight : innerHeight - card.height - 16;
-    const dist = Math.max(9, 9 * 300 / Math.max(120, availH), 9 * 520 / Math.max(200, availW) * (innerHeight / Math.max(200, availH)) * 0.55);
-    camera.position.set(player.x + Math.sin(a) * dist, 3.2, player.z + Math.cos(a) * dist);
-    camera.lookAt(player.x, 0.7, player.z);
+    const dist = Math.max(9, 9 * 300 / Math.max(120, availH), 9 * 520 / Math.max(200, availW) * (innerHeight / Math.max(200, availH)) * 0.55) * (drv ? 0.62 : 1);
+    camera.position.set(player.x + Math.sin(a) * dist, drv ? 2.4 : 3.2, player.z + Math.cos(a) * dist);
+    camera.lookAt(player.x, drv ? 1.7 : 0.7, player.z);
     if (side) camera.setViewOffset(innerWidth, innerHeight, -card.right / 2, 0, innerWidth, innerHeight);
     else camera.setViewOffset(innerWidth, innerHeight, 0, (card.height + 16) / 2, innerWidth, innerHeight);
     garageView = true;
