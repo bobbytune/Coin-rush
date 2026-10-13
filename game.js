@@ -298,12 +298,20 @@ function aiInput(c, dt){
   const tx = t.x - t.tz * c.lane, tz = t.z + t.tx * c.lane;
   const diff = wrapAngle(Math.atan2(tx - c.x, tz - c.z) - c.h);
   // slow down for bends coming up
-  const now = S[c.idx], ahead = S[(c.idx + Math.round(36 / MAP.ds)) % N];
-  const bend = Math.acos(clamp(now.tx * ahead.tx + now.tz * ahead.tz, -1, 1));
+  // look further ahead the faster we go, and brake for the sharpest bend coming up
+  const now = S[c.idx], reach = 24 + speed * 1.1;
+  let bend = 0;
+  for (let d = 12; d <= reach; d += 12) {
+    const a = S[(c.idx + Math.round(d / MAP.ds)) % N], b = S[(c.idx + Math.round((d + 24) / MAP.ds)) % N];
+    const turn = Math.acos(clamp(a.tx * b.tx + a.tz * b.tz, -1, 1)) * (d < 40 ? 1 : 40 / d + 0.35);
+    bend = Math.max(bend, turn, d < 40 ? Math.acos(clamp(now.tx * a.tx + now.tz * a.tz, -1, 1)) : 0);
+  }
   const want = RACE_SETTINGS.topSpeed * c.spec.speed * c.topMul * (1 - clamp((bend - 0.2) * 0.8, 0, 0.5)) * (c.spec.handling > 1 ? 1.04 : 1);
   const inp = { gas: speed < want + 2, brake: speed > want + 10, hand: false, steer: clamp(diff * 2.4, -1, 1) };
   if (c.reverseT > 0) { c.reverseT -= dt; return { gas: false, brake: true, hand: false, steer: -inp.steer }; }
-  if (speed < 3 && !c.air) { c.stuck += dt; if (c.stuck > 1.2) { c.stuck = 0; c.reverseT = 0.9; } } else c.stuck = 0;
+  if (speed < 3 && !c.air) { c.stuck += dt; if (c.stuck > 1.2) { c.stuck = 0; c.reverseT = 0.9; c.stuckCount = (c.stuckCount || 0) + 1; } } else c.stuck = 0;
+  if (speed > 20) c.stuckCount = 0;
+  if (c.stuckCount >= 3) { c.stuckCount = 0; resetCar(c); }   // properly wedged: put it back on the road
   // rubber-banding keeps the race close
   const gap = progress(player) - progress(c);
   c.topMul = c.skill * (1 + clamp(gap * 0.0012, -0.1, 0.15));
@@ -348,6 +356,11 @@ function updateHud(){
   $('fill').style.width = (boostMeter / COIN_SETTINGS.coinsForFullBoost * 100) + '%';
   $('boost').classList.toggle('on', player.boosting);
   drawMap();
+}
+function checkStuckHint(dt){
+  const off = MAP.nearestFull(player.x, player.z).d > MAP.half + 6, slow = Math.hypot(player.vx, player.vz) < 6;
+  player.lostT = (off && slow) || (off && player.lostT > 0) ? (player.lostT || 0) + dt : 0;
+  if (player.lostT > 3) { showMsg('Press R to get back on the road', 1500); player.lostT = 0.01 - 1.5; }
 }
 function checkWrongWay(dt){
   const s = S[player.idx], along = player.vx * s.tx + player.vz * s.tz;
@@ -451,7 +464,7 @@ function frame(now){
     });
     collideCars();
     racers.forEach(c => { updateProgress(c); if (!c.finished) checkLaps(c); });
-    if (state === 'race') checkWrongWay(dt);
+    if (state === 'race') { checkWrongWay(dt); checkStuckHint(dt); }
     coins.forEach(k => {
       if (!k.active) { if (raceTime > k.back) { k.active = true; k.m.visible = true; } return; }
       if (Math.abs(k.y - (player.y + 1.3)) < 2.6 && Math.hypot(k.x - player.x, k.z - player.z) < 3) {
