@@ -47,6 +47,43 @@ const CAR_MODELS = {
     extras: ['vanGlass', 'roofRack', 'roundLights'],
   },
 };
+// ---- open-top concepts ----
+CAR_MODELS.roadster = {   // 1950s-style two-seater
+  length: 4.3, width: 2.0, open: true, seat: -0.45, windscreen: 'normal',
+  body: [[-2.15, 0.4], [2.05, 0.4], [2.2, 0.56], [2.1, 0.8], [1.2, 0.9], [0.1, 0.93], [-0.9, 0.93], [-1.9, 0.88], [-2.2, 0.6]],
+  cabin: null, wheels: { front: 1.35, rear: -1.35, x: 0.92, rFront: 0.44, rRear: 0.44, width: 0.32 },
+  extras: ['fenders', 'chromeBumpers', 'roundLights'],
+};
+CAR_MODELS.hotrod = {     // exposed engine, giant rear wheels
+  length: 4.4, width: 1.9, open: true, seat: -0.6, windscreen: 'upright',
+  body: [[-2.1, 0.5], [1.0, 0.5], [1.1, 0.76], [1.0, 0.96], [-0.2, 1.0], [-1.0, 1.04], [-2.0, 1.0], [-2.2, 0.66]],
+  cabin: null, wheels: { front: 1.75, rear: -1.35, x: 0.95, rFront: 0.4, rRear: 0.64, width: 0.42 },
+  extras: ['engine', 'pipes', 'grille', 'frontAxle'],
+};
+CAR_MODELS.formula = {    // single-seater with open wheels and wings
+  length: 4.8, width: 1.05, open: true, seat: -0.35, windscreen: 'none',
+  body: [[-2.1, 0.22], [2.3, 0.22], [2.45, 0.3], [2.2, 0.42], [0.6, 0.66], [-0.4, 0.8], [-1.6, 0.76], [-2.2, 0.52]],
+  cabin: null, wheels: { front: 1.6, rear: -1.45, x: 1.08, rFront: 0.42, rRear: 0.48, width: 0.5 },
+  extras: ['frontWing', 'rearWing', 'sidepods', 'airbox'],
+};
+CAR_MODELS.kart = {       // tiny go-kart
+  length: 2.4, width: 1.15, open: true, seat: -0.25, windscreen: 'none',
+  body: [[-1.15, 0.14], [1.15, 0.14], [1.22, 0.22], [1.1, 0.32], [-1.1, 0.32], [-1.2, 0.22]],
+  cabin: null, wheels: { front: 0.85, rear: -0.8, x: 0.78, rFront: 0.26, rRear: 0.3, width: 0.34 },
+  extras: ['kartBumpers', 'kartEngine'],
+};
+CAR_MODELS.trail = {      // open-top 4x4
+  length: 4.1, width: 2.2, open: true, seat: -0.5, windscreen: 'upright',
+  body: [[-2.05, 0.55], [1.95, 0.55], [2.05, 0.75], [2.0, 1.25], [0.9, 1.3], [-2.05, 1.3]],
+  cabin: null, wheels: { front: 1.3, rear: -1.3, x: 1.0, rFront: 0.6, rRear: 0.6, width: 0.48 },
+  extras: ['rollBar', 'spare', 'flares', 'grilleSlots', 'roundLights'],
+};
+CAR_MODELS.barchetta = {  // low hypercar speedster with a wraparound visor
+  length: 4.6, width: 2.25, open: true, seat: -0.35, windscreen: 'visor',
+  body: [[-2.3, 0.3], [2.25, 0.3], [2.42, 0.42], [2.25, 0.6], [0.9, 0.86], [-0.6, 0.93], [-2.25, 0.9], [-2.36, 0.5]],
+  cabin: null, wheels: { front: 1.45, rear: -1.45, x: 1.08, rFront: 0.46, rRear: 0.5, width: 0.42 },
+  extras: ['fairing', 'lightbar', 'splitter', 'intakes'],
+};
 // open-top versions: same bodies, no roof, so you can see your driver
 CAR_MODELS.spyder = Object.assign({}, CAR_MODELS.furia, { cabin: null, open: true, seat: -0.45, extras: ['intakes', 'lightbar', 'lowWing', 'splitter', 'fairing'] });
 CAR_MODELS.dropTop = Object.assign({}, CAR_MODELS.bruiser, { cabin: null, open: true, seat: -0.35, extras: ['stripes', 'scoop', 'ducktail', 'roundLights'] });
@@ -167,9 +204,18 @@ function buildCarModel(modelId, paint, rimColor){
     top += 0.13;
     const interior = new THREE.MeshStandardMaterial({ color: '#2a2a33', roughness: 0.8 });
     if (M.open) {
-      add(boxG(W * 0.72, 0.03, 1.9), interior, 0, top + 0.005, sz + 0.15);
-      const ws = add(boxG(W * 0.74, 0.03, 0.62), glass, 0, top + 0.24, sz + 1.12); ws.rotation.x = -1.0;
-      add(boxG(W * 0.76, 0.05, 0.05), trim, 0, top + 0.47, sz + 0.97);
+      add(boxG(W * 0.72, 0.03, Math.min(1.9, L * 0.42)), interior, 0, top + 0.005, sz + 0.15);
+      const wsType = M.windscreen || 'normal';
+      if (wsType === 'normal') {
+        const ws = add(boxG(W * 0.74, 0.03, 0.62), glass, 0, top + 0.24, sz + 1.12); ws.rotation.x = -1.0;
+        add(boxG(W * 0.76, 0.05, 0.05), trim, 0, top + 0.47, sz + 0.97);
+      } else if (wsType === 'upright') {
+        const ws = add(boxG(W * 0.82, 0.5, 0.03), glass, 0, top + 0.27, sz + 0.95); ws.rotation.x = -0.2;
+        add(boxG(W * 0.86, 0.06, 0.06), trim, 0, top + 0.52, sz + 0.9);
+        [-1, 1].forEach(e => add(boxG(0.06, 0.55, 0.06), trim, e * W * 0.42, top + 0.26, sz + 0.95));
+      } else if (wsType === 'visor') {
+        const ws = add(new THREE.CylinderGeometry(0.55, 0.55, 0.22, 20, 1, true, -Math.PI / 2, Math.PI), glass, 0, top + 0.1, sz + 0.25); ws.scale.set(1.2, 1, 1.1);
+      }
     }
     const back = add(boxG(0.62, 0.62, 0.14), interior, 0, top + 0.12, sz - 0.3); back.rotation.x = -0.12;
     add(boxG(0.4, 0.22, 0.12), interior, 0, top + 0.5, sz - 0.34);
@@ -177,6 +223,36 @@ function buildCarModel(modelId, paint, rimColor){
     if (ex.has('fairing')) { const f = add(new THREE.SphereGeometry(0.34, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), paintMat, 0, top - 0.02, sz - 0.62); f.scale.set(1.1, 1.1, 2.2); }
     seat = { x: 0, y: top - 0.34, z: sz };
   }
+
+  // ---- concept car details ----
+  const chrome = new THREE.MeshStandardMaterial({ color: '#e9edf2', metalness: 1, roughness: 0.18, envMap: env, envMapIntensity: 1.2 });
+  const Wd = M.wheels;
+  if (ex.has('fenders')) [Wd.front, Wd.rear].forEach(z => [-1, 1].forEach(e => {
+    const f = add(new THREE.SphereGeometry(1, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), paintMat, e * (W / 2 - 0.12), 0.55, z); f.scale.set(0.3, 0.42, 0.78);
+  }));
+  if (ex.has('chromeBumpers')) [fz + 0.05, rz - 0.05].forEach(z => add(boxG(W - 0.1, 0.12, 0.12), chrome, 0, 0.5, z));
+  if (ex.has('engine')) {
+    add(boxG(0.8, 0.55, 0.95), chrome, 0, 0.88, 1.55);
+    add(boxG(0.9, 0.12, 1.0), trim, 0, 0.6, 1.55);
+    [-0.2, 0.2].forEach(x => { add(new THREE.CylinderGeometry(0.09, 0.09, 0.32, 12), chrome, x, 1.3, 1.45); add(new THREE.CylinderGeometry(0.11, 0.11, 0.06, 12), trim, x, 1.47, 1.45); });
+  }
+  if (ex.has('grille')) { add(boxG(0.85, 0.72, 0.1), chrome, 0, 0.82, 2.08); for (let i = -3; i <= 3; i++) add(boxG(0.04, 0.6, 0.12), trim, i * 0.1, 0.82, 2.09); [-1, 1].forEach(e => { const l = add(new THREE.CylinderGeometry(0.15, 0.15, 0.12, 16), head, e * 0.55, 0.95, 2.0); l.rotation.x = Math.PI / 2; }); }
+  if (ex.has('frontAxle')) add(boxG(2.0, 0.08, 0.08), trim, 0, 0.4, 1.75);
+  if (ex.has('pipes')) [-1, 1].forEach(e => { const pp = add(new THREE.CylinderGeometry(0.07, 0.07, 2.4, 12), chrome, e * (W / 2 + 0.06), 0.55, 0.0); pp.rotation.x = Math.PI / 2; });
+  if (ex.has('frontWing')) { add(boxG(2.4, 0.05, 0.5), paintMat, 0, 0.3, 2.3); [-1, 1].forEach(e => add(boxG(0.04, 0.25, 0.55), trim, e * 1.2, 0.36, 2.3)); }
+  if (ex.has('rearWing')) { add(boxG(1.5, 0.06, 0.45), paintMat, 0, 1.15, -2.1); add(boxG(1.5, 0.04, 0.3), trim, 0, 0.98, -2.1); [-1, 1].forEach(e => add(boxG(0.04, 0.45, 0.5), trim, e * 0.75, 1.0, -2.1)); }
+  if (ex.has('sidepods')) [-1, 1].forEach(e => { const pod = add(new THREE.SphereGeometry(1, 16, 10), paintMat, e * 0.62, 0.45, -0.4); pod.scale.set(0.32, 0.24, 1.1); });
+  if (ex.has('airbox')) { const ab = add(new THREE.SphereGeometry(1, 16, 10), paintMat, 0, 0.95, -0.95); ab.scale.set(0.22, 0.32, 0.7); }
+  if (ex.has('kartBumpers')) { const tube = trim; add(boxG(1.4, 0.1, 0.1), tube, 0, 0.3, 1.32); add(boxG(1.7, 0.1, 0.1), tube, 0, 0.3, -1.25); [-1, 1].forEach(e => add(boxG(0.1, 0.1, 1.0), tube, e * 0.75, 0.25, 0.05)); }
+  if (ex.has('kartEngine')) { add(boxG(0.35, 0.35, 0.4), chrome, 0.45, 0.45, -0.75); const ex1 = add(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 10), trim, 0.45, 0.45, -1.05); ex1.rotation.x = Math.PI / 2; }
+  if (ex.has('rollBar')) {
+    const tube = new THREE.MeshStandardMaterial({ color: '#2b2d42', metalness: 0.6, roughness: 0.35 });
+    [-0.85, 0.85].forEach(x => { add(boxG(0.1, 1.0, 0.1), tube, x, 1.8, -1.2); const s2 = add(boxG(0.1, 0.1, 0.9), tube, x, 1.8, -1.6); s2.rotation.x = 0.9; });
+    add(boxG(1.8, 0.1, 0.1), tube, 0, 2.3, -1.2);
+  }
+  if (ex.has('spare')) { const sp = add(new THREE.CylinderGeometry(0.5, 0.5, 0.3, 24), trim, 0, 1.15, rz - 0.18); sp.rotation.x = Math.PI / 2; const hub = add(new THREE.CylinderGeometry(0.25, 0.25, 0.32, 16), rim, 0, 1.15, rz - 0.18); hub.rotation.x = Math.PI / 2; }
+  if (ex.has('flares')) [Wd.front, Wd.rear].forEach(z => [-1, 1].forEach(e => add(boxG(0.18, 0.1, 1.5), trim, e * (W / 2 + 0.05), 1.25, z)));
+  if (ex.has('grilleSlots')) for (let i = -3; i <= 3; i++) add(boxG(0.08, 0.4, 0.05), trim, i * 0.17, 0.95, fz);
 
   // wheels: tyre + rim + spokes so you can see them spin
   const wheels = [], pivots = [];

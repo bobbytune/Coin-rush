@@ -38,6 +38,12 @@ const CARS = [
   { id: 'dropTop', name: 'Bruiser Drop-Top', blurb: 'Convertible muscle. All the grunt, plus the wind in your hair.', speed: 1.06, accel: 1.1, handling: 0.9, weight: 1.25, boost: 1.1 },
   { id: 'zippy',   name: 'Zippy R',     blurb: 'Hot hatch. Not the fastest, but it turns on a penny.',                       speed: 0.96, accel: 1.06, handling: 1.18, weight: 0.85, boost: 1.15 },
   { id: 'dune',    name: 'Sand Flea',   blurb: 'Dune buggy. Barely slows down on grass and dirt shortcuts.',                 speed: 0.95, accel: 1.12, handling: 1.08, weight: 0.85, boost: 1.0, offroad: true },
+  { id: 'roadster',  name: 'Coastline 57',   blurb: 'Fifties roadster with chrome bumpers. Smooth, balanced and stylish.',                 speed: 1.0,  accel: 1.02, handling: 1.08, weight: 1.0,  boost: 1.1 },
+  { id: 'hotrod',    name: 'Hot Rod',        blurb: 'All engine, huge back wheels. Rockets off the line, wobbly in the bends.',           speed: 1.04, accel: 1.18, handling: 0.84, weight: 1.15, boost: 1.15 },
+  { id: 'formula',   name: 'Formula X',      blurb: 'Open-wheel single-seater. Fastest in the corners, hates the grass.',                 speed: 1.1,  accel: 1.12, handling: 1.22, weight: 0.8,  boost: 0.95 },
+  { id: 'kart',      name: 'Go-Kart',        blurb: 'Tiny, twitchy and hilarious. Low top speed but turns instantly.',                    speed: 0.9,  accel: 1.15, handling: 1.25, weight: 0.7,  boost: 1.25 },
+  { id: 'trail',     name: 'Trail 4x4',      blurb: 'Open-top off-roader. Shrugs off grass and dirt, built like a tank.',                 speed: 0.95, accel: 1.0,  handling: 0.98, weight: 1.45, boost: 1.05, offroad: true },
+  { id: 'barchetta', name: 'Furia Barchetta',blurb: 'Hypercar speedster with a wraparound visor. No roof, no windscreen, no fear.',       speed: 1.13, accel: 1.08, handling: 0.98, weight: 0.88, boost: 1.0 },
   { id: 'hauler',  name: 'Hauler',      blurb: 'Delivery van. Slow, but nothing pushes it around.',                          speed: 0.92, accel: 0.9,  handling: 0.92, weight: 1.7,  boost: 1.2 },
 ];
 const PAINT_COLORS = ['#ff4f8b', '#e63946', '#ff9f1c', '#ffd23f', '#8ac926', '#2ec4b6', '#3a86ff', '#9b5de5', '#f1faee', '#22223b'];
