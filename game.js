@@ -87,33 +87,29 @@ const nearRamp = (x, z) => MAP.ramps.some(r => { const s = (x - r.x) * r.dx + (z
 })();
 
 // ---------- cars ----------
-const wheelGeo = new THREE.CylinderGeometry(0.55, 0.55, 0.45, 14); wheelGeo.rotateZ(Math.PI / 2);
-const wheelMat = mat('#22223b');
-function makeCar(color){
-  const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
-  const shadow = new THREE.Mesh(new THREE.CircleGeometry(2, 20), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.25, depthWrite: false }));
-  shadow.rotation.x = -Math.PI / 2; shadow.scale.set(1, 1.5, 1); shadow.position.y = 0.06; scene.add(shadow);
-  const hull = box(2.4, 0.9, 4.4, color); hull.position.y = 0.95; body.add(hull);
-  const cab = box(2, 0.8, 2.2, '#f1faee'); cab.position.set(0, 1.8, -0.3); body.add(cab);
-  const roof = box(2.05, 0.15, 2.0, color); roof.position.set(0, 2.25, -0.3); body.add(roof);
-  [-0.7, 0.7].forEach(x => { const l = box(0.5, 0.3, 0.1, '#fff3b0'); l.position.set(x, 1.05, 2.22); body.add(l);
-    const t = box(0.5, 0.3, 0.1, '#d62828'); t.position.set(x, 1.05, -2.22); body.add(t); });
-  const wheels = [], pivots = [];
-  [[-1.25, 1.4], [1.25, 1.4], [-1.25, -1.4], [1.25, -1.4]].forEach(([x, z], i) => {
-    const p = new THREE.Group(); p.position.set(x, 0.55, z); body.add(p);
-    const w = new THREE.Mesh(wheelGeo, wheelMat); p.add(w); wheels.push(w); if (i < 2) pivots.push(p);
-  });
-  const flameGeo = new THREE.ConeGeometry(0.35, 2, 10); flameGeo.rotateX(-Math.PI / 2);
-  const flameMat = new THREE.MeshBasicMaterial({ color: '#ffb703', transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
-  const flames = [-0.6, 0.6].map(x => { const f = new THREE.Mesh(flameGeo, flameMat); f.position.set(x, 0.75, -3.2); f.visible = false; body.add(f); return f; });
-  scene.add(root);
-  return { root, body, wheels, pivots, flames, shadow };
+const carById = id => CARS.find(c => c.id === id) || CARS[0];
+function loadPref(key, fallback){ try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; } }
+function savePref(key, v){ try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) {} }
+const myCar = Object.assign({ id: CARS[0].id, paint: (RACERS.find(r => r.player) || {}).color || PAINT_COLORS[0], rim: 'Silver' }, loadPref('coinrush-car', {}));
+if (!CARS.some(c => c.id === myCar.id)) myCar.id = CARS[0].id;
+if (!RIM_COLORS[myCar.rim]) myCar.rim = 'Silver';
+function setCarModel(c, id, paint, rimName){
+  if (c.root) { scene.remove(c.root); scene.remove(c.shadow); }
+  const spec = carById(id), m = buildCarModel(spec.id, paint, RIM_COLORS[rimName] || RIM_COLORS.Silver);
+  const root = new THREE.Group(), body = new THREE.Group(); root.add(body); body.add(m.group);
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 20), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false }));
+  shadow.rotation.x = -Math.PI / 2; shadow.scale.set(m.width * 0.62, m.length * 0.56, 1);
+  scene.add(shadow); scene.add(root);
+  Object.assign(c, { root, body, shadow, wheels: m.wheels, pivots: m.pivots, flames: m.flames, spec, color: paint });
 }
-const racers = RACERS.map((r, i) => {
-  const car = makeCar(r.color);
-  return Object.assign({ name: r.name, color: r.color, player: !!r.player, skill: r.skill || 1, slot: i, lane: (i % 2 ? 4 : -4) + (rand() - 0.5) * 2 }, car);
-});
+const racers = RACERS.map((r, i) => ({ name: r.name, color: r.color, baseColor: r.color, player: !!r.player, skill: r.skill || 1, slot: i, lane: (i % 2 ? 4 : -4) + (rand() - 0.5) * 2 }));
 const player = racers.find(r => r.player);
+function assignCars(){
+  const pool = CARS.filter(c => c.id !== myCar.id), order = (pool.length ? pool : CARS).slice().sort(() => rand() - 0.5);
+  let k = 0;
+  racers.forEach(c => { if (c.player) setCarModel(c, myCar.id, myCar.paint, myCar.rim); else setCarModel(c, order[k++ % order.length].id, c.baseColor, 'Silver'); });
+}
+assignCars();
 
 // progress round the lap is measured along the road, so laps only count when you go all the way round
 function trackS(i){ return i * MAP.ds; }
@@ -169,18 +165,20 @@ function drive(c, inp, dt){
   if (c.air) { c.x += c.vx * dt; c.z += c.vz * dt; collideWorld(c); return; }
   const surface = MAP.surfaceAt(c.x, c.z);
   if (surface === 'water' && c.y < 0.3) { splash(c); return; }
-  const surfMul = { road: 1, alley: MAP_LAYOUT.alleySpeed, dirt: MAP_LAYOUT.dirtSpeed }[surface] || MAP_LAYOUT.grassSpeed;
+  let surfMul = { road: 1, alley: MAP_LAYOUT.alleySpeed, dirt: MAP_LAYOUT.dirtSpeed }[surface] || MAP_LAYOUT.grassSpeed;
+  if (c.spec.offroad) surfMul = Math.max(surfMul, 0.95);
+  const st = c.spec;
   const sh = Math.sin(c.h), ch = Math.cos(c.h);
   let vf = c.vx * sh + c.vz * ch, vl = c.vx * ch - c.vz * sh;
-  const top = RACE_SETTINGS.topSpeed * c.topMul * surfMul * (c.boosting ? 1 + COIN_SETTINGS.boostPower : 1);
-  if (inp.gas) vf += 30 * (c.boosting ? 1.8 : 1) * dt;
+  const top = RACE_SETTINGS.topSpeed * st.speed * c.topMul * surfMul * (c.boosting ? 1 + COIN_SETTINGS.boostPower * (st.boost || 1) : 1);
+  if (inp.gas) vf += 30 * st.accel * (c.boosting ? 1.8 : 1) * dt;
   if (inp.brake) vf -= (vf > 0 ? 48 : 18) * dt;
   if (!inp.gas && !inp.brake) vf *= 1 - 0.7 * dt;
   if (vf > top) vf -= (vf - top) * 2.5 * dt;
   if (vf < -16) vf = -16;
-  vl *= Math.exp(-(inp.hand ? 1.4 : surface === 'road' || surface === 'alley' ? 7.5 : 5) * dt);
+  vl *= Math.exp(-(inp.hand ? 1.4 : (surface === 'road' || surface === 'alley' || st.offroad ? 7.5 : 5) * st.handling) * dt);
   if (inp.hand) vf *= 1 - 0.5 * dt;
-  const turn = (inp.hand ? 2.7 : 1.95) * (1 - 0.3 * Math.min(1, Math.abs(vf) / 70));
+  const turn = (inp.hand ? 2.7 : 1.95) * st.handling * (1 - 0.3 * Math.min(1, Math.abs(vf) / 70));
   c.h += inp.steer * turn * clamp(vf / 10, -1, 1) * dt;
   const sh2 = Math.sin(c.h), ch2 = Math.cos(c.h);
   c.vx = sh2 * vf + ch2 * vl; c.vz = ch2 * vf - sh2 * vl;
@@ -247,10 +245,11 @@ function collideCars(){
     if (Math.abs(a.y - b.y) > 2) continue;
     const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz);
     if (d > 4.4 || d < 1e-4) continue;
-    const nx = dx / d, nz = dz / d, push = (4.4 - d) / 2;
-    a.x -= nx * push; a.z -= nz * push; b.x += nx * push; b.z += nz * push;
+    const nx = dx / d, nz = dz / d, ma = a.spec.weight, mb = b.spec.weight, push = 4.4 - d;
+    const fa = mb / (ma + mb), fb = ma / (ma + mb);
+    a.x -= nx * push * fa; a.z -= nz * push * fa; b.x += nx * push * fb; b.z += nz * push * fb;
     const rel = (b.vx - a.vx) * nx + (b.vz - a.vz) * nz;
-    if (rel < 0) { const imp = rel * 0.9; a.vx += nx * imp; a.vz += nz * imp; b.vx -= nx * imp; b.vz -= nz * imp;
+    if (rel < 0) { const j = rel * 1.8 / (1 / ma + 1 / mb); a.vx += nx * j / ma; a.vz += nz * j / ma; b.vx -= nx * j / mb; b.vz -= nz * j / mb;
       if ((a.player || b.player) && rel < -8) { shake = Math.min(1, -rel / 30); blip(220, 80, 0.12, 0.15, 'sawtooth'); } }
   }
 }
@@ -286,7 +285,7 @@ function aiInput(c, dt){
   // slow down for bends coming up
   const now = S[c.idx], ahead = S[(c.idx + Math.round(36 / MAP.ds)) % N];
   const bend = Math.acos(clamp(now.tx * ahead.tx + now.tz * ahead.tz, -1, 1));
-  const want = RACE_SETTINGS.topSpeed * c.topMul * (1 - clamp((bend - 0.2) * 0.8, 0, 0.5));
+  const want = RACE_SETTINGS.topSpeed * c.spec.speed * c.topMul * (1 - clamp((bend - 0.2) * 0.8, 0, 0.5)) * (c.spec.handling > 1 ? 1.04 : 1);
   const inp = { gas: speed < want + 2, brake: speed > want + 10, hand: false, steer: clamp(diff * 2.4, -1, 1) };
   if (c.reverseT > 0) { c.reverseT -= dt; return { gas: false, brake: true, hand: false, steer: -inp.steer }; }
   if (speed < 3 && !c.air) { c.stuck += dt; if (c.stuck > 1.2) { c.stuck = 0; c.reverseT = 0.9; } } else c.stuck = 0;
@@ -351,9 +350,50 @@ function resetRace(){
 }
 function startRace(){
   if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
-  resetRace(); $('menu').hidden = true; $('results').hidden = true;
+  savePref('coinrush-car', myCar);
+  assignCars(); resetRace();
+  $('menu').hidden = true; $('results').hidden = true; $('garage').hidden = true; document.body.classList.remove('in-garage');
   state = 'countdown'; countdown = 3.5; lastCount = 0;
 }
+
+// ---------- garage ----------
+function openGarage(){
+  state = 'garage';
+  $('menu').hidden = true; $('results').hidden = true; $('garage').hidden = false; document.body.classList.add('in-garage');
+  setCarModel(player, myCar.id, myCar.paint, myCar.rim); resetRace();
+  racers.forEach(c => { if (!c.player) { c.root.visible = false; c.shadow.visible = false; } });
+  updateGarage(); $('raceBtn').focus();
+}
+function stepCar(dir){
+  const i = CARS.findIndex(c => c.id === myCar.id);
+  myCar.id = CARS[(i + dir + CARS.length) % CARS.length].id;
+  setCarModel(player, myCar.id, myCar.paint, myCar.rim); placeOnGrid(player); updateGarage();
+}
+const STAT_ROWS = [['Top speed', 'speed', 0.85, 1.2], ['Acceleration', 'accel', 0.85, 1.2], ['Handling', 'handling', 0.8, 1.25], ['Weight', 'weight', 0.7, 1.8], ['Boost', 'boost', 0.9, 1.25]];
+function updateGarage(){
+  const spec = carById(myCar.id), i = CARS.indexOf(spec);
+  $('carIndex').textContent = `${i + 1} / ${CARS.length}`;
+  $('carName').textContent = spec.name;
+  $('carBlurb').textContent = spec.blurb + (spec.offroad ? ' Off-road specialist.' : '');
+  $('carStats').innerHTML = STAT_ROWS.map(([label, key, lo, hi]) => {
+    const v = spec[key] || 1, pct = Math.round(clamp((v - lo) / (hi - lo), 0.06, 1) * 100);
+    return `<div class="stat-row"><span>${label}</span><div class="stat-bar"><div style="width:${pct}%"></div></div></div>`;
+  }).join('');
+  $('paints').innerHTML = PAINT_COLORS.map(c => `<button class="swatch${c === myCar.paint ? ' on' : ''}" data-paint="${c}" style="background:${c}" aria-label="Paint ${c}"></button>`).join('');
+  $('rims').innerHTML = Object.entries(RIM_COLORS).map(([n, c]) => `<button class="swatch rim${n === myCar.rim ? ' on' : ''}" data-rim="${n}" style="background:${c}" aria-label="${n} wheels" title="${n}"></button>`).join('');
+}
+$('paints').addEventListener('click', e => { const b = e.target.closest('[data-paint]'); if (!b) return; myCar.paint = b.dataset.paint; setCarModel(player, myCar.id, myCar.paint, myCar.rim); updateGarage(); });
+$('rims').addEventListener('click', e => { const b = e.target.closest('[data-rim]'); if (!b) return; myCar.rim = b.dataset.rim; setCarModel(player, myCar.id, myCar.paint, myCar.rim); updateGarage(); });
+$('prevCar').addEventListener('click', () => stepCar(-1));
+$('nextCar').addEventListener('click', () => stepCar(1));
+$('raceBtn').addEventListener('click', startRace);
+$('changeCarBtn').addEventListener('click', openGarage);
+addEventListener('keydown', e => {
+  if (state !== 'garage') return;
+  if (e.code === 'ArrowLeft' || e.code === 'KeyA') stepCar(-1);
+  if (e.code === 'ArrowRight' || e.code === 'KeyD') stepCar(1);
+  if (e.code === 'Enter' && document.activeElement === document.body) startRace();
+});
 function finishRace(){
   state = 'finished';
   setTimeout(() => {
@@ -365,7 +405,7 @@ function finishRace(){
   }, 1600);
   showMsg(player.place === 1 ? 'Winner!' : 'Finish!', 1600);
 }
-$('startBtn').addEventListener('click', startRace);
+$('startBtn').addEventListener('click', openGarage);
 $('againBtn').addEventListener('click', startRace);
 
 // ---------- loop ----------
@@ -416,12 +456,19 @@ function frame(now){
     c.shadow.position.set(c.x, 0.06, c.z); c.shadow.rotation.z = c.h;
     c.body.rotation.z = clamp((c.vl || 0) * 0.02, -0.12, 0.12);
     c.body.rotation.x = c.air ? clamp(-c.vy * 0.02, -0.35, 0.35) : clamp(-(c.vf || 0) * 0.0015, -0.05, 0.05);
-    c.wheels.forEach(w => w.rotation.x += (c.vf || 0) * dt / 0.55);
+    c.wheels.forEach(w => w.spin.rotation.x += (c.vf || 0) * dt / w.r);
     c.pivots.forEach(p => p.rotation.y = c.steerVis * 0.45);
     c.flames.forEach(f => { f.visible = c.boosting; f.scale.z = 0.8 + Math.random() * 0.6; });
   });
 
   // chase camera
+  if (state === 'garage') {
+    const a = t * 0.35 + 2.4;
+    camera.position.set(player.x + Math.sin(a) * 8, 3.4, player.z + Math.cos(a) * 8);
+    camera.lookAt(player.x, -1.1, player.z);   // aim below the car so it sits above the garage panel
+    if (Math.abs(camera.fov - 55) > 0.1) { camera.fov = 55; camera.updateProjectionMatrix(); }
+    updateHud(); renderer.render(scene, camera); requestAnimationFrame(frame); return;
+  }
   camH += wrapAngle(player.h - camH) * Math.min(1, 5 * dt);
   const back = player.boosting ? 12.5 : 11;
   const want = new THREE.Vector3(player.x - Math.sin(camH) * back, 5.2 + player.y * 0.7, player.z - Math.cos(camH) * back);

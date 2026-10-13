@@ -65,3 +65,30 @@ tr.me td{color:var(--mint)}
 #touch button.held{background:rgba(255,210,63,.9);color:#14163a}
 @media (max-width:560px){#map{width:96px;height:96px}.pos{font-size:32px}.val{font-size:16px}#stats{gap:10px}}
 @media (prefers-reduced-motion:reduce){#coins.pop{animation:none}}
+
+/* garage */
+.in-garage .hud{visibility:hidden}
+.in-garage #touch{visibility:hidden}
+#garage{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;justify-content:center;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));pointer-events:none}
+.garage-card{pointer-events:auto;width:min(460px,100%);padding:18px 20px;display:flex;flex-direction:column;gap:12px}
+.garage-card p{margin:0}
+.g-head{display:flex;align-items:center;gap:12px}
+.g-title{flex:1;text-align:center;display:flex;flex-direction:column;gap:2px;min-width:0}
+.g-title h2{font-family:var(--font-display);font-weight:400;font-size:clamp(22px,6vw,30px);line-height:1;margin:0;color:var(--gold);text-wrap:balance}
+.nav{flex:none;width:44px;height:44px;border-radius:50%;border:2px solid var(--panel-edge);background:rgba(255,255,255,.08);color:var(--text);font-size:16px;cursor:pointer}
+.nav:hover{background:rgba(255,255,255,.16)}
+.nav:focus-visible,.swatch:focus-visible{outline:3px solid var(--mint);outline-offset:2px}
+#carStats{display:grid;gap:6px}
+.stat-row{display:grid;grid-template-columns:96px 1fr;align-items:center;gap:10px;font-size:14px;color:var(--muted)}
+.stat-bar{height:8px;border-radius:4px;background:rgba(255,255,255,.12);overflow:hidden}
+.stat-bar div{height:100%;background:linear-gradient(90deg,var(--mint),var(--gold));border-radius:4px;transition:width .2s}
+.g-pick{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.g-pick .label{width:56px}
+.swatches{display:flex;flex-wrap:wrap;gap:8px;flex:1;min-width:0}
+.swatch{width:26px;height:26px;border-radius:50%;border:2px solid rgba(255,255,255,.35);cursor:pointer;padding:0}
+.swatch.on{border-color:#fff;box-shadow:0 0 0 3px var(--gold)}
+.swatch.rim{border-radius:6px}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap}
+.btn-row .go{flex:1;width:auto;min-width:140px}
+.go.alt{background:rgba(255,255,255,.12);color:var(--text);box-shadow:0 4px 0 rgba(0,0,0,.35)}
+@media (max-width:560px){.garage-card{padding:14px;gap:9px}.garage-card p{font-size:14px}}
