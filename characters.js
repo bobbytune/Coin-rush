@@ -10,6 +10,7 @@ const CHARACTERS = [
   { id: 'granny', name: 'Granny Gears', blurb: 'Eighty-four years young and still flooring it.' },
   { id: 'pill',   name: 'Captain Pill', blurb: 'Collected one boost too many and turned into one.' },
   { id: 'dino',   name: 'Dino Dave',    blurb: 'Tiny arms, huge right foot.' },
+  { id: 'survivor', name: 'The Survivor', blurb: 'Calm, confident, reliable. Never seen without the bandana.' },
 ];
 
 // colours for each character's clothes and skin
@@ -20,6 +21,7 @@ const CHARACTER_LOOKS = {
   granny: { top: '#e07a9a', legs: '#6d4c8f', shoes: '#5a3a2a', skin: '#f1c9a5' },
   pill:   { top: '#2ec4b6', legs: '#1f4d3a', shoes: '#ffffff', skin: '#f2f5f3' },
   dino:   { top: '#5fbf5a', legs: '#4a9e47', shoes: '#4a9e47', skin: '#6fcf68' },
+  survivor: { top: '#33362a', legs: '#2c2d27', shoes: '#1e1e1c', skin: '#7a4a32', arms: '#7a4a32', hands: '#232320', accent: '#c9be4f' },
 };
 
 // pose: 'seated' (hands on a steering wheel in front) or 'standing'
@@ -41,19 +43,45 @@ function buildCharacter(id, pose, tint){
 
   // legs (only when standing; in a car they're hidden inside the body)
   if (standing) {
-    [-0.13, 0.13].forEach(x => { limb([x, hip, 0], [x, 0.12, 0.02], 0.1, M.legs); const s = add(sphere(0.12, 12), M.shoes, x, 0.08, 0.08); s.scale.set(1, 0.6, 1.6); });
+    [-0.13, 0.13].forEach(x => { limb([x, hip, 0], [x, 0.12, 0.02], id === 'survivor' ? 0.115 : 0.1, M.legs); const s = add(sphere(0.12, 12), M.shoes, x, 0.08, 0.08); s.scale.set(id === 'survivor' ? 1.2 : 1, id === 'survivor' ? 0.75 : 0.6, 1.6);
+      if (id === 'survivor') {
+        const acc = std(look.accent);
+        add(new THREE.BoxGeometry(0.16, 0.2, 0.08), acc, x, 0.44, 0.1);                 // knee pads
+        add(new THREE.CylinderGeometry(0.125, 0.125, 0.05, 12), acc, x, 0.2, 0.01);       // boot straps
+        add(new THREE.BoxGeometry(0.1, 0.12, 0.06), std('#3d3e35'), x + (x > 0 ? 0.1 : -0.1), 0.62, 0.02);  // cargo pockets
+      } });
   }
   // body
   const torso = add(new THREE.CylinderGeometry(0.24, 0.28, 0.6, 16), M.top, 0, hip + 0.3, 0);
   add(sphere(0.24, 16), M.top, 0, hip + 0.6, 0).scale.set(1.05, 0.45, 0.9);
   if (id === 'dino') { const belly = add(sphere(0.2, 14), std('#d8f0a0'), 0, hip + 0.3, 0.12); belly.scale.set(1, 1.3, 0.5); }
+  if (id === 'survivor') {
+    const acc = std(look.accent), leather = std('#24241f', { roughness: 0.4 }), metal = std('#c9ccd1', { metalness: 0.8, roughness: 0.3 });
+    torso.scale.set(1.12, 1, 1);                                                                  // broad build
+    const sh = add(sphere(0.24, 16), M.top, 0, hip + 0.6, 0); sh.scale.set(1.35, 0.5, 0.95);       // wide shoulders
+    add(new THREE.CylinderGeometry(0.31, 0.31, 0.08, 18), leather, 0, hip + 0.04, 0);             // belt
+    add(new THREE.BoxGeometry(0.1, 0.08, 0.03), metal, 0, hip + 0.04, 0.31);                      // buckle
+    add(new THREE.BoxGeometry(0.12, 0.12, 0.07), leather, 0.24, hip + 0.06, 0.18);                // pouch
+    const strap = add(new THREE.BoxGeometry(0.06, 0.78, 0.04), leather, 0, hip + 0.32, 0.27); strap.rotation.z = 0.62;   // cross strap
+    add(new THREE.BoxGeometry(0.06, 0.035, 0.02), std('#ffffff', { emissive: '#ffffff', emissiveIntensity: 0.6 }), -0.06, hip + 0.42, 0.29);
+    [[-0.12, 0.2], [0.12, 0.28]].forEach(([x, y]) => add(new THREE.BoxGeometry(0.12, 0.03, 0.02), acc, x, hip + y, 0.275));   // yellow trim on the vest
+    const scarf = add(new THREE.ConeGeometry(0.3, 0.46, 3), acc, 0, hip + 0.5, 0.2); scarf.rotation.set(Math.PI + 0.25, Math.PI / 6 * 3, 0); scarf.scale.set(1.1, 1, 0.45);   // bandana knot hanging on the chest
+    add(new THREE.TorusGeometry(0.17, 0.085, 8, 18).rotateX(Math.PI / 2), acc, 0, hip + 0.72, 0.02);
+    const fold = add(sphere(0.2, 14), acc, 0, hip + 0.64, 0.12); fold.scale.set(1.3, 0.55, 0.9);
+  }
   // arms: on the wheel when seated, by the sides when standing
   [-1, 1].forEach(s => {
     const shoulder = [s * 0.3, hip + 0.56, 0];
     const short = id === 'dino';
     const hand = standing ? [s * 0.36, hip + (short ? 0.32 : 0.12), short ? 0.12 : 0.04] : [s * 0.2, 0.44, short ? 0.3 : 0.46];
-    limb(shoulder, hand, short ? 0.06 : 0.075, M.top);
-    add(sphere(0.085, 10), id === 'robo' ? M.legs : M.skin, ...hand);
+    limb(shoulder, hand, short ? 0.06 : (id === 'survivor' ? 0.09 : 0.075), look.arms ? std(look.arms) : M.top);
+    add(sphere(id === 'survivor' ? 0.1 : 0.085, 10), id === 'robo' ? M.legs : (look.hands ? std(look.hands) : M.skin), ...hand);
+    if (id === 'survivor') {
+      const t = 0.32, bx = shoulder[0] + (hand[0] - shoulder[0]) * t, by = shoulder[1] + (hand[1] - shoulder[1]) * t, bz = shoulder[2] + (hand[2] - shoulder[2]) * t;
+      if (s < 0) add(sphere(0.1, 12), std(look.accent), bx, by, bz).scale.set(1, 0.5, 1);       // armband
+      const cx = shoulder[0] + (hand[0] - shoulder[0]) * 0.85, cy = shoulder[1] + (hand[1] - shoulder[1]) * 0.85, cz = shoulder[2] + (hand[2] - shoulder[2]) * 0.85;
+      add(sphere(0.1, 12), std(look.hands), cx, cy, cz).scale.set(1, 0.7, 1);                       // glove cuff
+    }
   });
   // head
   const head = new THREE.Group(); head.position.set(0, hip + 0.9, 0); g.add(head);
@@ -91,6 +119,20 @@ function buildCharacter(id, pose, tint){
     H(new THREE.TorusGeometry(0.225, 0.02, 6, 24).rotateX(Math.PI / 2), std('#1f4d3a'), 0, 0.02, 0);
     [-0.08, 0.08].forEach(x => H(sphere(0.035, 10), M.black, x, 0.12, 0.2));
     const smile = H(new THREE.TorusGeometry(0.07, 0.014, 6, 12, Math.PI), M.black, 0, -0.04, 0.205); smile.rotation.z = Math.PI;
+  } else if (id === 'survivor') {
+    const skin = M.skin, dark = std('#16120f', { roughness: 0.9 });
+    const face = H(sphere(0.25, 20), skin, 0, 0, 0); face.scale.set(0.92, 1.12, 0.98);
+    const jaw = H(sphere(0.2, 16), skin, 0, -0.12, 0.04); jaw.scale.set(1.0, 0.75, 0.9);
+    const hair = H(new THREE.SphereGeometry(0.245, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.42), dark, 0, 0.06, -0.03); hair.scale.set(0.97, 1.05, 1.0);   // short cropped hair on top only
+    [-1, 1].forEach(e => {
+      H(sphere(0.05, 10), skin, e * 0.235, 0.0, -0.01);                                                // ears
+      H(sphere(0.03, 10), std('#ffffff'), e * 0.085, 0.05, 0.215); H(sphere(0.02, 8), dark, e * 0.085, 0.05, 0.235);   // eyes
+      const brow = H(new THREE.BoxGeometry(0.09, 0.022, 0.03), dark, e * 0.09, 0.105, 0.225); brow.rotation.z = e * -0.18;
+    });
+    H(sphere(0.04, 10), skin, 0, -0.03, 0.25);                                                          // nose
+    const mo = H(new THREE.BoxGeometry(0.14, 0.03, 0.03), dark, 0, -0.11, 0.225);                        // moustache
+    H(new THREE.BoxGeometry(0.06, 0.1, 0.04), dark, 0, -0.21, 0.2);                                     // goatee
+    [-1, 1].forEach(e => { const g2 = H(new THREE.BoxGeometry(0.025, 0.1, 0.03), dark, e * 0.075, -0.15, 0.215); g2.rotation.z = e * 0.2; });
   } else if (id === 'dino') {
     const skin = M.skin;
     H(sphere(0.26, 18), skin, 0, 0, 0);
