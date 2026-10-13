@@ -527,7 +527,7 @@ function finishRace(){
   showMsg(player.place === 1 ? 'Winner!' : 'Finish!', 1600);
 }
 const PICK_DRIVER = CHARACTERS.length > 1;   // only show the driver screen once there's more than one character
-if (!PICK_DRIVER) $('changeDriverBtn').hidden = true;
+if (!PICK_DRIVER) { $('changeDriverBtn').hidden = true; $('startBtn').textContent = 'Choose your car'; }
 $('startBtn').addEventListener('click', () => (PICK_DRIVER ? openDriver() : openGarage()));
 $('againBtn').addEventListener('click', startRace);
 
@@ -591,7 +591,7 @@ function frame(now){
     // frame the car (or driver) in the space beside or above the panel
     const card = document.querySelector(drv ? '#driverSelect .garage-card' : '#garage .garage-card').getBoundingClientRect(), side = card.right < innerWidth * 0.55 && card.height < innerHeight * 0.95;
     const availW = side ? innerWidth - card.right : innerWidth, availH = side ? innerHeight : innerHeight - card.height - 16;
-    const dist = Math.max(9, 9 * 300 / Math.max(120, availH), 9 * 520 / Math.max(200, availW) * (innerHeight / Math.max(200, availH)) * 0.55) * (drv ? 0.62 : 1);
+    const dist = Math.max(9, 9 * 300 / Math.max(120, availH), 9 * 520 / Math.max(200, availW) * (innerHeight / Math.max(200, availH)) * 0.55) * (drv ? (side ? 0.62 : 0.85) : 1);
     camera.position.set(player.x + Math.sin(a) * dist, drv ? 2.4 : 3.2, player.z + Math.cos(a) * dist);
     camera.lookAt(player.x, drv ? 1.7 : 0.7, player.z);
     if (side) camera.setViewOffset(innerWidth, innerHeight, -card.right / 2, 0, innerWidth, innerHeight);

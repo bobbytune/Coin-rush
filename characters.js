@@ -2,12 +2,14 @@
 // Each character is built from simple rounded shapes. Add your own by copying one of the
 // entries in CHARACTERS and giving it a 'head' function.
 
-// For now everyone drives as the default racer, whose helmet and suit match their car's paint.
-// When you add more characters here, a driver select screen appears automatically before the garage.
-// Example heads already built below that you can switch on: 'house', 'robo', 'granny', 'pill', 'dino'.
+// The drivers you can pick on the driver screen. Rivals get the others.
 const CHARACTERS = [
-  { id: 'ace', name: 'Racer', blurb: 'The default driver. Helmet on, foot down.' },
-  // { id: 'house', name: 'House Guy', blurb: 'Straight out of Solangeles.' },
+  { id: 'house',  name: 'House Guy',    blurb: 'Straight out of Solangeles. Bricks for brains, heart of gold.' },
+  { id: 'ace',    name: 'Ace Turbo',    blurb: 'Pro racer. Never takes the helmet off. Suit matches the car.' },
+  { id: 'robo',   name: 'Robo-9',       blurb: 'Calculates the racing line to twelve decimal places.' },
+  { id: 'granny', name: 'Granny Gears', blurb: 'Eighty-four years young and still flooring it.' },
+  { id: 'pill',   name: 'Captain Pill', blurb: 'Collected one boost too many and turned into one.' },
+  { id: 'dino',   name: 'Dino Dave',    blurb: 'Tiny arms, huge right foot.' },
 ];
 
 // colours for each character's clothes and skin
@@ -22,7 +24,7 @@ const CHARACTER_LOOKS = {
 
 // pose: 'seated' (hands on a steering wheel in front) or 'standing'
 function buildCharacter(id, pose, tint){
-  const look = Object.assign({}, CHARACTER_LOOKS[id] || CHARACTER_LOOKS.ace, tint ? { top: tint } : {});
+  const look = Object.assign({}, CHARACTER_LOOKS[id] || CHARACTER_LOOKS.ace, tint && (id === 'ace' || !CHARACTER_LOOKS[id]) ? { top: tint } : {});   // only Ace's suit follows the paint
   const g = new THREE.Group();
   const std = (c, extra) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.55, metalness: 0.05 }, extra || {}));
   const M = { top: std(look.top), legs: std(look.legs), shoes: std(look.shoes), skin: std(look.skin), white: std('#ffffff'), black: std('#15131f', { roughness: 0.3 }) };
