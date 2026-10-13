@@ -16,7 +16,6 @@
   <div class="stat"><span class="label">Lap</span><span class="val" id="lap">1/3</span></div>
   <div class="stat"><span class="label">Time</span><span class="val" id="time">0:00.00</span></div>
 </div>
-<div class="hud" id="arrow"><svg viewBox="0 0 46 46"><path d="M23 4 L40 38 L23 30 L6 38 Z" fill="#ffd23f" stroke="#14163a" stroke-width="3" stroke-linejoin="round"/></svg></div>
 <div class="hud" id="right">
   <div class="panel" id="coins"><span class="coin-ico" id="coinIco"></span><span id="coinCount">0</span></div>
   <canvas class="panel" id="map" width="264" height="264"></canvas>
@@ -35,7 +34,7 @@
 <div class="overlay" id="menu">
   <div class="card">
     <h1>Coin Rush</h1>
-    <p>Three laps around town against three rivals. Grab coins on the road to fill your boost meter, then fire it off to pull ahead.</p>
+    <p>Three laps of the circuit against three rivals. Grab coins to fill your boost meter, hit the ramps, and look out for dirt shortcuts.</p>
     <div class="keys">
       <kbd>W / ↑</kbd><span>Accelerate</span>
       <kbd>S / ↓</kbd><span>Brake and reverse</span>
@@ -59,6 +58,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="settings.js"></script>
+<script src="map.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
