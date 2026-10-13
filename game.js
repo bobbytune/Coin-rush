@@ -448,7 +448,7 @@ function startRace(){
 let driverPreview = null;
 function showDriverPreview(){
   if (driverPreview) scene.remove(driverPreview);
-  driverPreview = buildCharacter(myCar.driver, 'standing'); driverPreview.scale.setScalar(1.6);
+  driverPreview = buildCharacter(myCar.driver, 'standing'); driverPreview.scale.setScalar(myCar.driver === 'survivor' ? 1.85 : 1.6);
   driverPreview.position.set(player.x, 0, player.z); driverPreview.rotation.y = player.h; scene.add(driverPreview);
 }
 function openDriver(){
