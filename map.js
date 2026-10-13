@@ -84,6 +84,13 @@ const MAP_LAYOUT = {
   buildings: 190,
   trees: 220,
   seed: 11,          // change to shuffle where buildings and trees go
+  // Landmarks: big one-off buildings. 'at' is [x, z]; they turn to face the track.
+  landmarks: [
+    { type: 'pillTower', at: [0, 156] },     // north
+    { type: 'pillTower', at: [100, -88] },   // east
+    { type: 'pillTower', at: [0, -152] },    // south
+    { type: 'pillTower', at: [-200, 0] },    // west
+  ],
 };
 // =====================================================================
 
@@ -265,6 +272,44 @@ function buildMap(scene, renderer){
     return ramp;
   });
 
+  // ---------- landmark: the Pill Tower ----------
+  function buildPillTower(l){
+    const g = new THREE.Group(); g.position.set(l.x, 0, l.z); scene.add(g);
+    const near = S[nearestFull(S, l.x, l.z).i]; g.rotation.y = Math.atan2(near.x - l.x, near.z - l.z);   // window faces the track
+    const std = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.6, metalness: 0.05 }, o || {}));
+    const Mk = (geo, m, x, y, z) => { const me = new THREE.Mesh(geo, m); me.position.set(x, y, z); me.castShadow = true; me.receiveShadow = true; g.add(me); return me; };
+    const H = 64, R = 11, D = 0.82;
+    const pts = [[2.5, 0], [4, 0.5], [7.5, 2.5], [10, 6], [R, 11]];
+    for (let y = 12; y <= H - R; y += 2) pts.push([R, y]);
+    for (let k = 1; k <= 14; k++) { const a = k / 14 * Math.PI / 2; pts.push([Math.cos(a) * R, H - R + Math.sin(a) * R]); }
+    pts[pts.length - 1][0] = 0.01;
+    const split = H * 0.48;
+    const lower = pts.filter(p => p[1] <= split + 0.01).concat([[R, split]]), upper = [[R, split]].concat(pts.filter(p => p[1] > split));
+    const panels = col => makeTex(256, (c, w) => { c.fillStyle = col; c.fillRect(0, 0, w, w); c.strokeStyle = 'rgba(0,0,0,.10)'; c.lineWidth = 2;
+      for (let i = 0; i <= 8; i++) { c.beginPath(); c.moveTo(i * w / 8, 0); c.lineTo(i * w / 8, w); c.stroke(); } for (let j = 0; j <= 6; j++) { c.beginPath(); c.moveTo(0, j * w / 6); c.lineTo(w, j * w / 6); c.stroke(); } });
+    const gloss = col => std('#ffffff', { map: panels(col), roughness: 0.28, metalness: 0.05 });
+    const lathe = (pp, m) => { const me = Mk(new THREE.LatheGeometry(pp.map(([r, y]) => new THREE.Vector2(r, y)), 48), m, 0, 0, 0); me.scale.set(1, 1, D); };
+    lathe(lower, gloss('#2f9e78')); lathe(upper, gloss('#e9e9e4'));
+    Mk(new THREE.TorusGeometry(R + 0.05, 0.35, 8, 64).rotateX(Math.PI / 2), std('#262a2e'), 0, split, 0).scale.set(1, D, 1);
+    const glassMat = std('#2b3d4f', { metalness: 0.6, roughness: 0.08, transparent: true, opacity: 0.55 });
+    const inside = std('#8a7f6a'), frame = std('#1d2125', { roughness: 0.4 });
+    const front = y => { let r = R; for (let i = 0; i < pts.length - 1; i++) { const [r1, y1] = pts[i], [r2, y2] = pts[i + 1]; if (y >= y1 && y <= y2) r = r1 + (r2 - r1) * (y - y1) / (y2 - y1 || 1); } return r * D; };
+    const sw = 2.6, top = H - 3.5, bottom = 5;
+    for (let y = bottom; y < top; y += 0.5) {
+      const z = front(y + 0.25), tilt = Math.atan2(front(y + 0.5) - front(y), 0.5);
+      Mk(new THREE.BoxGeometry(sw, 0.52, 0.06), glassMat, 0, y + 0.25, z + 0.32).rotation.x = -tilt;
+      Mk(new THREE.BoxGeometry(sw, 0.52, 0.04), inside, 0, y + 0.25, z + 0.1).rotation.x = -tilt;
+      [-1, 1].forEach(e => { Mk(new THREE.BoxGeometry(0.35, 0.52, 0.6), frame, e * (sw / 2 + 0.17), y + 0.25, z + 0.12).rotation.x = -tilt; });
+    }
+    for (let y = bottom + 2.8; y < top; y += 3.2) Mk(new THREE.BoxGeometry(sw, 0.2, 0.35), frame, 0, y, front(y) + 0.2);
+    Mk(new THREE.BoxGeometry(5, 4, 0.2), glassMat, 0, 2, 3.4); Mk(new THREE.BoxGeometry(5.6, 0.4, 0.6), frame, 0, 4.2, 3.4); Mk(new THREE.BoxGeometry(3.2, 3.2, 0.15), std('#fff1c4', { emissive: '#ffd98a', emissiveIntensity: 0.4 }), 0, 1.7, 3.3);
+    Mk(new THREE.CylinderGeometry(15, 15, 0.3, 40), std('#cfcfcf', { roughness: 0.9 }), 0, 0.15, 0);
+    [[-9, 6], [9, 6], [-11, -4], [11, -4], [0, -12]].forEach(([x, z]) => { Mk(new THREE.CylinderGeometry(0.25, 0.35, 3, 7), std(T.treeTrunk), x, 1.5, z);
+      [[0, 4.4, 0, 1.8], [0.9, 3.8, 0.4, 1.3], [-0.8, 3.9, -0.3, 1.3]].forEach(([dx, y, dz, r]) => Mk(new THREE.SphereGeometry(r, 12, 9), std(T.treeLeaves), x + dx, y, z + dz)); });
+    // you crash into the tower itself, not the plaza
+    circles.push({ x: l.x, z: l.z, r: R * 0.92 });
+  }
+
   // ---------- scenery ----------
   const distRoad = (x, z) => {
     let d = nearestFull(S, x, z).d - HALF - 1.5;
@@ -273,6 +318,9 @@ function buildMap(scene, renderer){
   };
   const styleAt = (x, z) => { const d = L.districts.find(d => x >= d.area[0] && x <= d.area[1] && z >= d.area[2] && z <= d.area[3]); return T.styles[d ? d.style : 'town']; };
   const solids = [], circles = [], lim = L.size - 8;
+  const landmarks = (L.landmarks || []).map(l => ({ x: l.at[0], z: l.at[1], r: 17, type: l.type }));
+  const nearLandmark = (x, z, pad) => landmarks.some(l => Math.hypot(x - l.x, z - l.z) < l.r + pad);
+  landmarks.forEach(l => { if (l.type === 'pillTower') buildPillTower(l); });
   let tries = 0;
   while (solids.length < L.buildings && tries++ < L.buildings * 60) {
     const x = (rand() * 2 - 1) * lim, z = (rand() * 2 - 1) * lim, st = styleAt(x, z);
@@ -281,6 +329,7 @@ function buildMap(scene, renderer){
     if (distRoad(x, z) < Math.hypot(w, d) / 2 + 4) continue;
     if (L.water.some(wt => x + w / 2 + 4 > wt.minX && x - w / 2 - 4 < wt.maxX && z + d / 2 + 4 > wt.minZ && z - d / 2 - 4 < wt.maxZ)) continue;
     if (solids.some(b => x + w / 2 + 3 > b.minX && x - w / 2 - 3 < b.maxX && z + d / 2 + 3 > b.minZ && z - d / 2 - 3 < b.maxZ)) continue;
+    if (nearLandmark(x, z, Math.hypot(w, d) / 2 + 3)) continue;
     const h = st.minHeight + rand() * (st.maxHeight - st.minHeight);
     solids.push({ minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2, h, color: st.colors[Math.floor(rand() * st.colors.length)], roof: st.roof, roofColor: st.roofColor });
   }
@@ -345,6 +394,7 @@ function buildMap(scene, renderer){
     if (rand() > styleAt(x, z).trees * 0.6) continue;
     if (distRoad(x, z) < 7 || inWater(x, z, 4)) continue;
     if (solids.some(b => x > b.minX - 3 && x < b.maxX + 3 && z > b.minZ - 3 && z < b.maxZ + 3)) continue;
+    if (nearLandmark(x, z, 3)) continue;
     trees.push({ x, z, s: 0.8 + rand() * 0.6 });
   }
   for (let i = 0; i < 90; i++) { const a = rand() * Math.PI * 2, r = L.size + 15 + rand() * 90, x = Math.cos(a) * r, z = Math.sin(a) * r; if (!inWater(x, z, 3)) trees.push({ x, z, s: 0.9 + rand() * 0.8, outside: true }); }
@@ -378,6 +428,7 @@ function buildMap(scene, renderer){
     const x = (rand() * 2 - 1) * lim, z = (rand() * 2 - 1) * lim;
     if (distRoad(x, z) < 3 || inWater(x, z, 3)) continue;
     if (solids.some(b => x > b.minX - 1.5 && x < b.maxX + 1.5 && z > b.minZ - 1.5 && z < b.maxZ + 1.5)) continue;
+    if (nearLandmark(x, z, 1)) continue;
     bushes.push([x, z, 0.6 + rand() * 0.8]);
   }
   const bushMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 9, 6), mat('#ffffff'), bushes.length);
