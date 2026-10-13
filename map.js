@@ -190,7 +190,7 @@ function buildMap(scene){
   const ramps = L.ramps.map(r => {
     const onShort = r.shortcut !== undefined, src = onShort ? shortcuts[r.shortcut].samples : S;
     const s = src[nearestFull(src, r.near[0], r.near[1]).i], w = onShort ? L.shortcuts[r.shortcut].width - 1 : L.roadWidth - 2;
-    const ramp = { x: s.x - s.tx * L.rampLength, z: s.z - s.tz * L.rampLength, dx: s.tx, dz: s.tz, len: L.rampLength, h: L.rampHeight, w };
+    const ramp = { x: s.x - s.tx * L.rampLength, z: s.z - s.tz * L.rampLength, dx: s.tx, dz: s.tz, len: L.rampLength, h: L.rampHeight, w, track: !onShort };
     const shape = new THREE.Shape(); shape.moveTo(0, 0); shape.lineTo(ramp.len, 0); shape.lineTo(ramp.len, ramp.h); shape.lineTo(0, 0);
     const geo = new THREE.ExtrudeGeometry(shape, { depth: w, bevelEnabled: false }); geo.translate(0, 0, -w / 2);
     const m = new THREE.Mesh(geo, mat(T.ramp)); m.position.set(ramp.x, 0.05, ramp.z); m.rotation.y = Math.atan2(-ramp.dz, ramp.dx); scene.add(m);

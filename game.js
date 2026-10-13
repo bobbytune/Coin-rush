@@ -162,7 +162,7 @@ function blip(f1, f2, dur = 0.09, vol = 0.12, type = 'square'){
 // ---------- physics ----------
 let boostMeter = 0, totalCoins = 0, shake = 0;
 function drive(c, inp, dt){
-  if (c.air) { c.x += c.vx * dt; c.z += c.vz * dt; collideWorld(c); return; }
+  if (c.air) { airControl(c, inp, dt); c.x += c.vx * dt; c.z += c.vz * dt; collideWorld(c); return; }
   const surface = MAP.surfaceAt(c.x, c.z);
   if (surface === 'water' && c.y < 0.3) { splash(c); return; }
   let surfMul = { road: 1, alley: MAP_LAYOUT.alleySpeed, dirt: MAP_LAYOUT.dirtSpeed }[surface] || MAP_LAYOUT.grassSpeed;
@@ -186,6 +186,20 @@ function drive(c, inp, dt){
   c.steerVis += (inp.steer - c.steerVis) * Math.min(1, 10 * dt);
   collideWorld(c);
 }
+// After a ramp on the main road, steer the car in the air so it follows the track and lands on it
+function airControl(c, inp, dt){
+  const sp = Math.hypot(c.vx, c.vz);
+  if (sp < 1) return;
+  let dir = Math.atan2(c.vx, c.vz);
+  if (c.airRamp && c.airRamp.track) {
+    const s = S[c.idx], off = (c.x - s.x) * -s.tz + (c.z - s.z) * s.tx;
+    const want = Math.atan2(s.tx, s.tz) + clamp(off * 0.05, -0.45, 0.45);
+    dir += clamp(wrapAngle(want - dir), -1.8 * dt, 1.8 * dt);
+  }
+  dir += (inp.steer || 0) * 0.7 * dt;
+  c.vx = Math.sin(dir) * sp; c.vz = Math.cos(dir) * sp;
+  c.h += wrapAngle(dir - c.h) * Math.min(1, 6 * dt);
+}
 function updateHeight(c, dt){
   let groundY = 0, hit = null;
   for (const r of MAP.ramps) {
@@ -200,7 +214,8 @@ function updateHeight(c, dt){
   if (hit) { c.y = groundY; c.lastRamp = hit; return; }
   if (c.lastRamp) {
     const r = c.lastRamp, along = c.vx * r.dx + c.vz * r.dz;
-    c.vy = along > 5 && c.y > r.h * 0.6 ? along * r.h / r.len : 0;
+    c.vy = along > 5 && c.y > r.h * 0.6 ? Math.min(along, 46) * r.h / r.len : 0;   // capped so fast cars don't fly miles
+    c.airRamp = r;
     c.air = c.y > 0.2 || c.vy > 0; c.lastRamp = null;
     if (c.air && c.player && c.vy > 0) blip(300, 700, 0.2, 0.08, 'triangle');
     return;
@@ -409,7 +424,7 @@ $('startBtn').addEventListener('click', openGarage);
 $('againBtn').addEventListener('click', startRace);
 
 // ---------- loop ----------
-let camH = 0, last = performance.now();
+let camH = 0, camY = 0, last = performance.now();
 const camPos = new THREE.Vector3();
 function frame(now){
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
@@ -470,13 +485,14 @@ function frame(now){
     updateHud(); renderer.render(scene, camera); requestAnimationFrame(frame); return;
   }
   camH += wrapAngle(player.h - camH) * Math.min(1, 5 * dt);
-  const back = player.boosting ? 12.5 : 11;
-  const want = new THREE.Vector3(player.x - Math.sin(camH) * back, 5.2 + player.y * 0.7, player.z - Math.cos(camH) * back);
+  const back = 11;
+  camY += (player.y - camY) * Math.min(1, 10 * dt);   // camera rises with the car so it doesn't look like it shrinks
+  const want = new THREE.Vector3(player.x - Math.sin(camH) * back, 5.2 + camY, player.z - Math.cos(camH) * back);
   camPos.lerp(want, Math.min(1, 8 * dt));
   shake *= Math.exp(-6 * dt);
   camera.position.set(camPos.x + (Math.random() - 0.5) * shake, camPos.y + (Math.random() - 0.5) * shake, camPos.z + (Math.random() - 0.5) * shake);
-  camera.lookAt(player.x + Math.sin(camH) * 5, 1.6 + player.y * 0.8, player.z + Math.cos(camH) * 5);
-  const fov = player.boosting ? 84 : 70;
+  camera.lookAt(player.x + Math.sin(camH) * 5, 1.6 + camY, player.z + Math.cos(camH) * 5);
+  const fov = player.boosting ? 76 : 70;
   if (Math.abs(camera.fov - fov) > 0.1) { camera.fov += (fov - camera.fov) * Math.min(1, 4 * dt); camera.updateProjectionMatrix(); }
 
   updateHud();

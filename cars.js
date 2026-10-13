@@ -60,7 +60,7 @@ function buildCarModel(modelId, paint, rimColor){
   const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x || 0, y || 0, z || 0); group.add(m); return m; };
   const boxG = (w, h, d) => new THREE.BoxGeometry(w, h, d);
 
-  function extrude(points, width, bevel = 0.08){
+  function extrude(points, width, bevel = 0.03){
     const sh = new THREE.Shape(); points.forEach(([u, v], i) => (i ? sh.lineTo(u, v) : sh.moveTo(u, v)));
     const depth = Math.max(0.05, width - bevel * 2);
     const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: bevel > 0, bevelSize: bevel, bevelThickness: bevel, bevelSegments: 2 });
@@ -69,12 +69,12 @@ function buildCarModel(modelId, paint, rimColor){
   }
   add(extrude(M.body, W), paintMat);
   if (M.cabin) {
-    add(extrude(M.cabin, M.cabinWidth, 0.06), glass);
+    add(extrude(M.cabin, M.cabinWidth, 0), glass);
     // painted roof panel along the top of the cabin
     const top = M.cabin.filter(p => p[1] > Math.max(...M.cabin.map(q => q[1])) - 0.05);
     if (top.length >= 2) {
       const z1 = Math.max(...top.map(p => p[0])), z2 = Math.min(...top.map(p => p[0])), y = top[0][1];
-      add(boxG(M.cabinWidth - 0.1, 0.06, (z1 - z2) + 0.1), paintMat, 0, y + 0.03, (z1 + z2) / 2);
+      add(boxG(M.cabinWidth + 0.04, 0.08, (z1 - z2) + 0.12), paintMat, 0, y + 0.02, (z1 + z2) / 2);   // overlaps the glass so the two never flicker
     }
   }
   // underside / sills so there is no gap above the road
@@ -106,7 +106,7 @@ function buildCarModel(modelId, paint, rimColor){
   if (ex.has('ducktail')) add(boxG(W - 0.2, 0.12, 0.35), paintMat, 0, 1.1, rearZ + 0.25);
   if (ex.has('roofWing')) add(boxG(1.75, 0.08, 0.45), paintMat, 0, 1.76, -1.75);
   if (ex.has('scoop')) add(boxG(0.7, 0.22, 1.0), trim, 0, 1.12, 1.4);
-  if (ex.has('stripes')) [-0.28, 0.28].forEach(x => add(boxG(0.3, 0.02, L - 0.4), new THREE.MeshStandardMaterial({ color: '#f4f1de', roughness: 0.4 }), x, 1.05, 0));
+  if (ex.has('stripes')) [-0.28, 0.28].forEach(x => add(boxG(0.3, 0.02, L - 0.4), new THREE.MeshStandardMaterial({ color: '#f4f1de', roughness: 0.4 }), x, 1.085, 0));
   if (ex.has('cage')) {
     const tube = new THREE.MeshStandardMaterial({ color: '#2b2d42', metalness: 0.6, roughness: 0.35 });
     [[-0.75, 0.6], [0.75, 0.6], [-0.75, -0.9], [0.75, -0.9]].forEach(([x, z]) => add(boxG(0.12, 1.0, 0.12), tube, x, 1.45, z));
