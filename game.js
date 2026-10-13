@@ -33,11 +33,43 @@ function coinGeometry(){
   }
   const g = new THREE.CylinderGeometry(s * 0.8, s * 0.8, s * 0.22, 24); g.rotateX(Math.PI / 2); return g;
 }
-const coinGeo = coinGeometry();
-const coinMat = new THREE.MeshStandardMaterial({ color: COIN_SETTINGS.color, emissive: COIN_SETTINGS.glowColor, emissiveIntensity: 0.35, metalness: 0.5, roughness: 0.35 });
-$('coinIco').style.background = COIN_SETTINGS.color;
+// pill: a capsule with one coloured half and one white half, with a dark outline, tilted like the icon
+const PILL = COIN_SETTINGS.shape === 'pill';
+const pillParts = PILL ? (function(){
+  const s = COIN_SETTINGS.size, r = s * 0.5, L = s * 0.6, outline = s * 0.12;
+  const capTop = new THREE.SphereGeometry(r, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2); capTop.translate(0, L, 0);
+  const capBot = new THREE.SphereGeometry(r, 18, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2); capBot.translate(0, -L, 0);
+  const halfTop = new THREE.CylinderGeometry(r, r, L, 18, 1, true); halfTop.translate(0, L / 2, 0);
+  const halfBot = new THREE.CylinderGeometry(r, r, L, 18, 1, true); halfBot.translate(0, -L / 2, 0);
+  const oCyl = new THREE.CylinderGeometry(r + outline, r + outline, L * 2, 18, 1, true);
+  const oTop = new THREE.SphereGeometry(r + outline, 18, 10); oTop.translate(0, L, 0);
+  const oBot = new THREE.SphereGeometry(r + outline, 18, 10); oBot.translate(0, -L, 0);
+  const band = new THREE.CylinderGeometry(r + outline * 0.5, r + outline * 0.5, outline * 1.2, 18);
+  const shine = new THREE.BoxGeometry(r * 0.18, L * 0.7, r * 0.18); shine.translate(-r * 0.55, -L * 0.9, r * 0.75);
+  const std = (c, e) => new THREE.MeshStandardMaterial({ color: c, emissive: e || c, emissiveIntensity: 0.25, roughness: 0.35, metalness: 0.05 });
+  return {
+    color: std(COIN_SETTINGS.color, COIN_SETTINGS.glowColor), second: std(COIN_SETTINGS.secondColor || '#f2f5f3'),
+    outline: new THREE.MeshBasicMaterial({ color: COIN_SETTINGS.outlineColor || '#1f4d3a', side: THREE.BackSide }),
+    band: new THREE.MeshBasicMaterial({ color: COIN_SETTINGS.outlineColor || '#1f4d3a' }), shineMat: new THREE.MeshBasicMaterial({ color: '#ffffff' }),
+    capTop, capBot, halfTop, halfBot, oCyl, oTop, oBot, bandGeo: band, shine,
+  };
+})() : null;
+function makePickup(){
+  if (!PILL) return new THREE.Mesh(coinGeo, coinMat);
+  const P = pillParts, g = new THREE.Group(), tilt = new THREE.Group(); g.add(tilt); tilt.rotation.z = Math.PI / 4;
+  [[P.capTop, P.second], [P.halfTop, P.second], [P.capBot, P.color], [P.halfBot, P.color], [P.oCyl, P.outline], [P.oTop, P.outline], [P.oBot, P.outline], [P.bandGeo, P.band], [P.shine, P.shineMat]]
+    .forEach(([geo, m]) => tilt.add(new THREE.Mesh(geo, m)));
+  return g;
+}
+const coinGeo = PILL ? null : coinGeometry();
+const coinMat = PILL ? null : new THREE.MeshStandardMaterial({ color: COIN_SETTINGS.color, emissive: COIN_SETTINGS.glowColor, emissiveIntensity: 0.35, metalness: 0.5, roughness: 0.35 });
+if (PILL) {
+  const ico = $('coinIco'), oc = COIN_SETTINGS.outlineColor || '#1f4d3a';
+  Object.assign(ico.style, { width: '26px', height: '13px', borderRadius: '7px', transform: 'rotate(-45deg)', boxShadow: 'none',
+    border: `2px solid ${oc}`, background: `linear-gradient(90deg, ${COIN_SETTINGS.color} 50%, ${oc} 50%, ${oc} calc(50% + 2px), ${COIN_SETTINGS.secondColor || '#f2f5f3'} calc(50% + 2px))` });
+} else $('coinIco').style.background = COIN_SETTINGS.color;
 const coins = [];
-function addCoin(x, y, z){ const m = new THREE.Mesh(coinGeo, coinMat); m.position.set(x, y, z); scene.add(m); coins.push({ m, x, y, z, active: true, back: 0, phase: rand() * 6 }); }
+function addCoin(x, y, z){ const m = makePickup(); m.position.set(x, y, z); scene.add(m); coins.push({ m, x, y, z, active: true, back: 0, phase: rand() * 6 }); }
 const nearRamp = (x, z) => MAP.ramps.some(r => { const s = (x - r.x) * r.dx + (z - r.z) * r.dz, l = (x - r.x) * -r.dz + (z - r.z) * r.dx; return s > -6 && s < r.len + 48 && Math.abs(l) < r.w / 2 + 2; });
 (function placeCoins(){
   const step = Math.max(2, Math.round(COIN_SETTINGS.spacing / MAP.ds));
@@ -50,7 +82,7 @@ const nearRamp = (x, z) => MAP.ramps.some(r => { const s = (x - r.x) * r.dx + (z
   // a trail of coins through the air after every ramp
   MAP.ramps.forEach(r => {
     const v = 46, vy = v * r.h / r.len;
-    for (let t = 0.15; t < 0.8; t += 0.15) { const d = r.len + v * t, y = r.h + vy * t - 0.5 * GRAVITY * t * t + 1.3; addCoin(r.x + r.dx * d, y, r.z + r.dz * d); }
+    for (let t = 0.2; t < 0.8; t += 0.2) { const d = r.len + v * t, y = r.h + vy * t - 0.5 * GRAVITY * t * t + 1.3; addCoin(r.x + r.dx * d, y, r.z + r.dz * d); }
   });
 })();
 
@@ -327,7 +359,7 @@ function finishRace(){
   setTimeout(() => {
     const order = racers.slice().sort((a, b) => progress(b) - progress(a));
     $('resTitle').textContent = player.place === 1 ? '1st place!' : ord(player.place) + ' place';
-    $('resSub').textContent = `Finished in ${fmt(player.finishTime)} with ${totalCoins} ${COIN_SETTINGS.shape === 'coin' ? 'coins' : 'pickups'} collected.`;
+    $('resSub').textContent = `Finished in ${fmt(player.finishTime)} with ${totalCoins} ${COIN_SETTINGS.name || 'pickups'} collected.`;
     $('resTable').innerHTML = order.map((c, i) => `<tr class="${c.player ? 'me' : ''}"><td>${ord(i + 1)}</td><td><span class="dot" style="background:${c.color}"></span>${c.name}</td><td>${c.finished ? fmt(c.finishTime) : 'Still racing'}</td></tr>`).join('');
     $('results').hidden = false; $('againBtn').focus();
   }, 1600);
