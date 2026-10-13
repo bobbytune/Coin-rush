@@ -31,6 +31,7 @@ const RACERS = [
 // Stats: 1 = normal. speed = top speed, accel = how fast it gets there, handling = steering and grip,
 // weight = how hard it shoves other cars, boost = boost strength. offroad: true = less slowdown on grass and dirt.
 const CARS = [
+  { id: 'homey',     name: 'House Car',      blurb: 'Straight out of Solangeles. A little car with a big personality, and a chimney.', speed: 1.0, accel: 1.04, handling: 1.05, weight: 1.15, boost: 1.15 },
   { id: 'furia',   name: 'Furia V12',   blurb: 'Italian-style wedge supercar. Blistering top speed, twitchy in the bends.', speed: 1.12, accel: 1.06, handling: 0.94, weight: 0.95, boost: 1.0 },
   { id: 'spyder',  name: 'Furia Spyder', blurb: 'The Furia with the roof chopped off. Lighter, sharper, and everyone can see you.', speed: 1.1, accel: 1.08, handling: 1.0, weight: 0.9, boost: 1.0 },
   { id: 'raijin',  name: 'Raijin GT',   blurb: 'Japanese grand tourer. Grips like glue and launches hard.',                speed: 1.05, accel: 1.12, handling: 1.1,  weight: 1.1,  boost: 1.0 },
@@ -46,6 +47,6 @@ const CARS = [
   { id: 'barchetta', name: 'Furia Barchetta',blurb: 'Hypercar speedster with a wraparound visor. No roof, no windscreen, no fear.',       speed: 1.13, accel: 1.08, handling: 0.98, weight: 0.88, boost: 1.0 },
   { id: 'hauler',  name: 'Hauler',      blurb: 'Delivery van. Slow, but nothing pushes it around.',                          speed: 0.92, accel: 0.9,  handling: 0.92, weight: 1.7,  boost: 1.2 },
 ];
-const PAINT_COLORS = ['#ff4f8b', '#e63946', '#ff9f1c', '#ffd23f', '#8ac926', '#2ec4b6', '#3a86ff', '#9b5de5', '#f1faee', '#22223b'];
+const PAINT_COLORS = ['#d9c39a', '#ff4f8b', '#e63946', '#ff9f1c', '#ffd23f', '#8ac926', '#2ec4b6', '#3a86ff', '#9b5de5', '#f1faee', '#22223b'];
 const RIM_COLORS = { Silver: '#c9ced6', Black: '#22222a', Gold: '#d4af37', Neon: '#4de8e0' };
 // =====================================================================

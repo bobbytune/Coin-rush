@@ -47,6 +47,14 @@ const CAR_MODELS = {
     extras: ['vanGlass', 'roofRack', 'roundLights'],
   },
 };
+// ---- the House car (from the character sheet): closed, with a face, tiled roof and chimney ----
+CAR_MODELS.homey = {
+  length: 3.9, width: 2.2,
+  body:  [[-1.92, 0.36], [1.86, 0.36], [1.98, 0.56], [1.92, 1.02], [1.3, 1.22], [-1.92, 1.24], [-1.98, 0.52]],
+  cabin: [[1.2, 1.16], [1.06, 2.2], [-1.82, 2.2], [-1.9, 1.16]], cabinWidth: 2.0, noWindscreen: true,
+  wheels: { front: 1.22, rear: -1.22, x: 0.98, rFront: 0.5, rRear: 0.5, width: 0.44 },
+  extras: ['houseCar'], defaultRim: '#e7dcc4', matte: true,
+};
 // ---- open-top concepts ----
 CAR_MODELS.roadster = {   // 1950s-style two-seater
   length: 4.3, width: 2.0, open: true, seat: -0.45, windscreen: 'normal',
@@ -92,12 +100,12 @@ function buildCarModel(modelId, paint, rimColor){
   const M = CAR_MODELS[modelId] || CAR_MODELS.furia;
   const group = new THREE.Group();
   const env = (typeof window !== 'undefined' && window.CAR_ENV) || null;
-  const paintMat = new THREE.MeshStandardMaterial({ color: paint, metalness: 0.35, roughness: 0.22, envMap: env, envMapIntensity: 0.9 });
+  const paintMat = new THREE.MeshStandardMaterial({ color: paint, metalness: M.matte ? 0.0 : 0.35, roughness: M.matte ? 0.62 : 0.22, envMap: env, envMapIntensity: M.matte ? 0.35 : 0.9 });
   const glass = new THREE.MeshStandardMaterial({ color: '#1b2333', metalness: 0.7, roughness: 0.08, envMap: env, envMapIntensity: 1.2 });
   const trim = new THREE.MeshStandardMaterial({ color: '#16161d', metalness: 0.2, roughness: 0.6 });
   const head = new THREE.MeshStandardMaterial({ color: '#fff6d5', emissive: '#fff1b8', emissiveIntensity: 0.9 });
   const tail = new THREE.MeshStandardMaterial({ color: '#ff2a2a', emissive: '#ff1a1a', emissiveIntensity: 0.8 });
-  const rim = new THREE.MeshStandardMaterial({ color: rimColor || '#c9ced6', metalness: 0.85, roughness: 0.22, envMap: env, envMapIntensity: 1 });
+  const rim = new THREE.MeshStandardMaterial({ color: (M.defaultRim && (!rimColor || rimColor === '#c9ced6')) ? M.defaultRim : (rimColor || '#c9ced6'), metalness: 0.85, roughness: 0.22, envMap: env, envMapIntensity: 1 });
   const W = M.width, L = M.length;
   const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x || 0, y || 0, z || 0); group.add(m); return m; };
   const boxG = (w, h, d) => new THREE.BoxGeometry(w, h, d);
@@ -147,7 +155,7 @@ function buildCarModel(modelId, paint, rimColor){
       const m = add(boxG(M.cabinWidth * 0.84, 0.04, len * 0.86), glass, 0, (p1[1] + p2[1]) / 2 + nv * sgn * 0.09, (p1[0] + p2[0]) / 2 + nu * sgn * 0.09);
       m.rotation.x = -Math.atan2(dv, du);
     };
-    pane(M.cabin[0], M.cabin[1]);
+    if (!M.noWindscreen) pane(M.cabin[0], M.cabin[1]);
     pane(M.cabin[M.cabin.length - 2], M.cabin[M.cabin.length - 1]);
   }
   // underside / sills so there is no gap above the road
@@ -158,7 +166,55 @@ function buildCarModel(modelId, paint, rimColor){
   const fz = frontZ + 0.13, rz = rearZ - 0.13;   // the rounded body edge sits a little outside the profile points
   const ex = new Set(M.extras);
   // lights
-  if (ex.has('roundLights')) {
+  if (ex.has('houseCar')) {
+    const cream = new THREE.MeshStandardMaterial({ color: '#e6d7b8', roughness: 0.65 });
+    const ink = new THREE.MeshStandardMaterial({ color: '#2a211a', roughness: 0.5 });
+    // tiled roof: a gable running front to back, drawn with rows of tiles
+    const tiles = (function(){
+      const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+      g.fillStyle = '#a8432a'; g.fillRect(0, 0, 128, 128);
+      for (let r = 0; r < 8; r++) { g.fillStyle = 'rgba(80,20,10,.45)'; g.fillRect(0, r * 16 + 13, 128, 3);
+        for (let k = 0; k < 5; k++) { const x = (k * 32 + (r % 2) * 16) % 128; g.fillRect(x, r * 16, 2, 14); }
+        g.fillStyle = 'rgba(255,170,130,.18)'; g.fillRect(0, r * 16, 128, 3); }
+      const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 2); return t;
+    })();
+    const roofMat = new THREE.MeshStandardMaterial({ color: '#ffffff', map: tiles, roughness: 0.7 });
+    const rw = M.cabinWidth / 2 + 0.38, rh = 0.85, rl = 3.45;
+    const tri = new THREE.Shape(); tri.moveTo(-rw, 0); tri.lineTo(rw, 0); tri.lineTo(0, rh); tri.lineTo(-rw, 0);
+    const roofGeo = new THREE.ExtrudeGeometry(tri, { depth: rl, bevelEnabled: true, bevelSize: 0.05, bevelThickness: 0.06, bevelSegments: 2 });
+    roofGeo.translate(0, 0, -rl / 2);
+    add(roofGeo, roofMat, 0, 2.2, -0.35);
+    add(boxG(M.cabinWidth + 0.7, 0.08, rl + 0.15), new THREE.MeshStandardMaterial({ color: '#9b3c22', roughness: 0.7 }), 0, 2.2, -0.35);
+    // gable ends in body colour so it reads as a little house
+    const gable = new THREE.Shape(); gable.moveTo(-M.cabinWidth / 2, 0); gable.lineTo(M.cabinWidth / 2, 0); gable.lineTo(0, rh * 0.8); gable.lineTo(-M.cabinWidth / 2, 0);
+    [1.0, -1.72].forEach(z => add(new THREE.ExtrudeGeometry(gable, { depth: 0.05, bevelEnabled: false }), paintMat, 0, 2.24, z));
+    // chimney
+    add(boxG(0.38, 0.75, 0.38), cream, 0.45, 2.75, -1.0);
+    add(boxG(0.48, 0.12, 0.48), cream, 0.45, 3.17, -1.0);
+    add(boxG(0.3, 0.04, 0.3), ink, 0.45, 3.24, -1.0);
+    // the face on the front of the cabin
+    [-1, 1].forEach(e => {
+      add(boxG(0.68, 0.66, 0.08), ink, e * 0.45, 1.72, 1.2);
+      add(boxG(0.56, 0.54, 0.1), new THREE.MeshStandardMaterial({ color: '#f6f3ea', roughness: 0.35 }), e * 0.45, 1.72, 1.215);
+      add(boxG(0.13, 0.32, 0.1), ink, e * 0.45, 1.7, 1.235);
+    });
+    const nose = add(new THREE.SphereGeometry(0.22, 18, 12), new THREE.MeshStandardMaterial({ color: '#9a5a32', roughness: 0.6 }), 0, 1.36, 1.28); nose.scale.set(1.25, 0.85, 0.75);
+    const smile = add(new THREE.TorusGeometry(0.2, 0.025, 6, 16, Math.PI * 0.8), ink, 0, 1.27, 1.25); smile.rotation.z = Math.PI + Math.PI * 0.1;
+    // big round headlights, bumpers, mirrors, tail lights
+    [-1, 1].forEach(e => {
+      const rimL = add(new THREE.CylinderGeometry(0.27, 0.27, 0.1, 22), cream, e * 0.66, 0.86, fz - 0.02); rimL.rotation.x = Math.PI / 2;
+      const lens = add(new THREE.CylinderGeometry(0.21, 0.21, 0.12, 22), head, e * 0.66, 0.86, fz); lens.rotation.x = Math.PI / 2;
+      add(boxG(0.32, 0.46, 0.08), tail, e * 0.8, 0.98, rz - 0.02);
+      add(boxG(0.18, 0.2, 0.3), paintMat, e * (W / 2 + 0.1), 1.62, 0.95);
+      add(boxG(0.06, 0.16, 0.24), glass, e * (W / 2 + 0.2), 1.62, 0.95);
+    });
+    [fz + 0.06, rz - 0.06].forEach(z => {
+      const b = add(new THREE.CylinderGeometry(0.17, 0.17, W + 0.05, 16), cream, 0, 0.5, z); b.rotation.z = Math.PI / 2;
+      add(boxG(0.7, 0.18, 0.06), new THREE.MeshStandardMaterial({ color: '#e2d6bb', roughness: 0.6 }), 0, 0.5, z + (z > 0 ? 0.17 : -0.17));
+    });
+    // two-window look on each side (split the glass with a pillar)
+    [-1, 1].forEach(e => add(boxG(0.06, 0.75, 0.14), paintMat, e * (M.cabinWidth / 2 + 0.035), 1.7, -0.25));
+  } else if (ex.has('roundLights')) {
     [-1, 1].forEach(s => {
       const hl = add(new THREE.CylinderGeometry(0.17, 0.17, 0.08, 14), head, s * (W / 2 - 0.4), frontY + 0.12, fz + 0.02); hl.rotation.x = Math.PI / 2;
       add(boxG(0.45, 0.22, 0.06), tail, s * (W / 2 - 0.4), 0.75, rz - 0.02);
