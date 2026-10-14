@@ -353,7 +353,7 @@ function buildMap(scene, renderer){
     MP(new THREE.BoxGeometry(11, 0.8, 11), stoneDark, 0, 0.4, 0); MP(new THREE.BoxGeometry(9, 3.2, 9), stone, 0, 2.4, 0); MP(new THREE.BoxGeometry(9.6, 0.4, 9.6), stoneDark, 0, 4.0, 0);
     const pc = document.createElement('canvas'); pc.width = 512; pc.height = 160; const c = pc.getContext('2d');
     c.fillStyle = '#b08d57'; c.fillRect(0, 0, 512, 160); c.strokeStyle = '#6b5230'; c.lineWidth = 8; c.strokeRect(8, 8, 496, 144);
-    c.fillStyle = '#3d2c14'; c.textAlign = 'center'; c.font = 'bold 54px Georgia, serif'; c.fillText('CHILLHOUSE', 256, 72); c.font = '30px Georgia, serif'; c.fillText('Pride of Solangeles', 256, 122);
+    c.fillStyle = '#3d2c14'; c.textAlign = 'center'; c.font = 'bold 54px Georgia, serif'; c.fillText('CHILLHOUSE', 256, 72); c.font = 'italic 28px Georgia, serif'; c.fillText('“I’m just chilling in my house”', 256, 122);
     MP(new THREE.BoxGeometry(5, 1.6, 0.1), std('#ffffff', { map: new THREE.CanvasTexture(pc), metalness: 0.4, roughness: 0.4 }), 0, 2.4, 4.53);
     MP(new THREE.CylinderGeometry(13, 13, 0.25, 48), std('#cfcfcf', { roughness: 0.9 }), 0, 0.12, 0);
     [[-10, 6], [10, 6], [-10, -6], [10, -6]].forEach(([x, z]) => { MP(new THREE.CylinderGeometry(1.4, 1.6, 1, 16), stone, x, 0.5, z);
