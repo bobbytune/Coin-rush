@@ -10,6 +10,7 @@ const CHARACTERS = [
   { id: 'granny', name: 'Granny Gears', blurb: 'Eighty-four years young and still flooring it.' },
   { id: 'pill',   name: 'Captain Pill', blurb: 'Collected one boost too many and turned into one.' },
   { id: 'dino',   name: 'Dino Dave',    blurb: 'Tiny arms, huge right foot.' },
+  { id: 'deadpan', name: 'Alon', blurb: 'Says nothing. Wins anyway. The tank top says the rest.' },
   { id: 'survivor', name: 'The Survivor', blurb: 'Calm, confident, reliable. Never seen without the bandana.' },
 ];
 
@@ -27,6 +28,7 @@ const CHARACTER_LOOKS = {
 // pose: 'seated' (hands on a steering wheel in front) or 'standing'
 function buildCharacter(id, pose, tint){
   if (id === 'survivor') return buildSurvivor(pose);
+  if (id === 'deadpan') return buildDeadpan(pose);
   const look = Object.assign({}, CHARACTER_LOOKS[id] || CHARACTER_LOOKS.ace, tint && (id === 'ace' || !CHARACTER_LOOKS[id]) ? { top: tint } : {});   // only Ace's suit follows the paint
   const g = new THREE.Group();
   const std = (c, extra) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.55, metalness: 0.05 }, extra || {}));
@@ -235,6 +237,126 @@ function buildSurvivor(pose){
   blob(0.02, dark, V(0, -0.105, 0.075), 0.8, 1.3, 0.7, head);
 
   if (seated) g.scale.setScalar(1.3);   // match the cartoon drivers' size so he's visible over the dash
+  g.traverse(m => { if (m.isMesh) m.castShadow = true; });
+  return g;
+}
+
+// ---- Stop Being Poor: big chibi head, bandana skullcap, white oval shades ----
+function buildDeadpan(pose){
+  const seated = pose !== 'standing';
+  const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+  function canvasTex(w, h, draw){ const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t; }
+  const std = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.6, metalness: 0.02 }, o || {}));
+  const add = (geo, m, x, y, z, parent) => { const me = new THREE.Mesh(geo, m); me.position.set(x || 0, y || 0, z || 0); me.castShadow = true; me.receiveShadow = true; (parent || body).add(me); return me; };
+  const sph = (r, s = 24) => new THREE.SphereGeometry(r, s, Math.round(s * 0.75));
+  const limb = (a, b, r1, r2, m, parent) => { const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b);
+    const me = add(new THREE.CylinderGeometry(r2, r1, A.distanceTo(B), 16), m, (A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2, parent); me.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.clone().sub(A).normalize()); add(sph(r2, 14), m, B.x, B.y, B.z, parent); return me; };
+  const skin = std('#e6d4c0', { roughness: 0.65 }), skinShade = std('#d2bea8', { roughness: 0.65 });
+  const hair = std('#a9a5a0', { roughness: 0.8 }), hairDark = std('#8c8883', { roughness: 0.85 }), hairLight = std('#bdb9b4', { roughness: 0.8 });
+  const white = std('#f4f4f2', { roughness: 0.55 }), black = std('#1a1a1d', { roughness: 0.5 }), pants = std('#202024', { roughness: 0.75 });
+
+  // bare feet
+  if (!seated) {
+    [-0.07, 0.07].forEach(x => {
+      const foot = add(sph(0.05, 16), skin, x, 0.028, 0.035); foot.scale.set(0.9, 0.5, 1.75);
+      for (let t = 0; t < 4; t++) add(sph(0.012, 8), skinShade, x - 0.024 + t * 0.016 + (x > 0 ? -0.004 : 0.004), 0.016, 0.115);
+    });
+    // slim black trousers
+    [-0.07, 0.07].forEach(x => { limb([x, 0.64, 0], [x, 0.3, 0.005], 0.052, 0.044, pants); limb([x, 0.3, 0.005], [x, 0.065, 0.01], 0.044, 0.04, pants); });
+  } else {
+    // sitting: thighs forward, shins down to the pedals
+    [-0.075, 0.075].forEach(x => { limb([x, 0.64, 0], [x, 0.67, 0.36], 0.052, 0.046, pants); limb([x, 0.67, 0.36], [x, 0.36, 0.44], 0.046, 0.04, pants);
+      const foot = add(sph(0.05, 16), skin, x, 0.33, 0.5); foot.scale.set(0.9, 0.5, 1.75); });
+  }
+  const seat = add(new THREE.CylinderGeometry(0.12, 0.125, 0.12, 20), pants, 0, 0.64, 0); seat.scale.set(1.05, 1, 0.75);
+  // long white tank top with print
+  const print = canvasTex(256, 320, (c, w, h) => { c.fillStyle = '#f4f4f2'; c.fillRect(0, 0, w, h); c.fillStyle = '#1d1d1f'; c.textAlign = 'center'; c.font = 'bold 66px Impact, Arial Black, Arial'; ['STOP', 'BEING', 'POOR'].forEach((t, i) => c.fillText(t, w / 2, 82 + i * 74)); });
+  const torso = add(new THREE.CylinderGeometry(0.105, 0.125, 0.36, 24), white, 0, 0.85, 0); torso.scale.set(1.08, 1, 0.72);
+  add(new THREE.PlaneGeometry(0.14, 0.175), std('#ffffff', { map: print, roughness: 0.55 }), 0, 0.86, 0.095).rotation.x = -0.05;
+  const chest = add(sph(0.115, 20), white, 0, 1.0, 0); chest.scale.set(1.15, 0.5, 0.74);
+  [-1, 1].forEach(e => add(new THREE.BoxGeometry(0.028, 0.08, 0.1), white, e * 0.055, 1.05, 0));   // straps
+  add(new THREE.CylinderGeometry(0.032, 0.036, 0.07, 14), skin, 0, 1.07, 0);   // neck
+  // slim bare arms with two black wristbands each
+  [-1, 1].forEach(e => {
+    const sh = [e * 0.12, 1.02, 0], el = seated ? [e * 0.17, 0.88, 0.14] : [e * 0.16, 0.8, -0.015], wr = seated ? [e * 0.15, 0.95, 0.32] : [e * 0.172, 0.6, 0.02];
+    add(sph(0.038, 14), skin, ...sh); limb(sh, el, 0.032, 0.028, skin); limb(el, wr, 0.028, 0.024, skin);
+    [0.18, 0.34].forEach((t, j) => { const x = wr[0] + (el[0] - wr[0]) * t, y = wr[1] + (el[1] - wr[1]) * t, z = wr[2] + (el[2] - wr[2]) * t;
+      const band = add(new THREE.CylinderGeometry(0.032, 0.032, j ? 0.02 : 0.03, 14), black, x, y, z); band.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(el[0] - wr[0], el[1] - wr[1], el[2] - wr[2]).normalize()); });
+    const hand = seated ? add(sph(0.034, 14), skin, wr[0], wr[1] + 0.01, wr[2] + 0.03) : add(sph(0.033, 14), skin, e * 0.174, 0.55, 0.025); if (!seated) hand.scale.set(0.75, 1.35, 0.7);
+  });
+
+  // head
+  const head = new THREE.Group(); head.position.set(0, 1.36, 0.01); head.scale.setScalar(1.4); body.add(head);
+  const H = (geo, m, x, y, z) => add(geo, m, x, y, z, head);
+  const face = H(sph(0.2, 36), skin, 0, 0, 0); face.scale.set(1.04, 1.0, 0.92);
+  const jaw = H(sph(0.16, 24), skin, 0, -0.07, 0.03); jaw.scale.set(1.05, 0.75, 0.85);
+  [-1, 1].forEach(e => { const ear = H(sph(0.04, 12), skin, e * 0.195, -0.03, 0.0); ear.scale.set(0.5, 1, 0.75); H(sph(0.018, 8), skinShade, e * 0.2, -0.03, 0.005).scale.set(0.4, 1, 0.7); });
+  // hair: one continuous shell that hangs from under the bandana into a bob, ragged and flicked out at the ends
+  const strands = canvasTex(256, 256, (c, w, h) => {
+    c.fillStyle = '#b3afaa'; c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 260; i++) { const x = Math.random() * w, v = 150 + Math.random() * 60 | 0; c.strokeStyle = `rgba(${v},${v - 3},${v - 7},0.55)`; c.lineWidth = 1 + Math.random() * 3;
+      c.beginPath(); c.moveTo(x, 0); c.bezierCurveTo(x + (Math.random() - 0.5) * 20, h * 0.4, x + (Math.random() - 0.5) * 20, h * 0.7, x + (Math.random() - 0.5) * 16, h); c.stroke(); }
+  });
+  strands.wrapS = strands.wrapT = THREE.RepeatWrapping; strands.repeat.set(6, 1);
+  const hairMat = std('#c9c5c0', { map: strands, roughness: 0.7, side: THREE.DoubleSide });
+  function hairShell({ a0, a1, cols, yTop, yBot, rTop, rBot, jag, flick, seed }){
+    const pos = [], uv = [], idx = [], rows = 14;
+    const rnd = (k) => { const x = Math.sin(k * 12.9898 + seed * 78.233) * 43758.5453; return x - Math.floor(x); };
+    for (let i = 0; i <= cols; i++) {
+      const u = i / cols, a = a0 + (a1 - a0) * u;
+      const cut = jag * (0.5 * Math.sin(i * 1.7 + seed) + 0.5 * rnd(i)) ;           // ragged bottom edge
+      const yEnd = yBot - cut;
+      for (let j = 0; j <= rows; j++) {
+        const v = j / rows, y = yTop + (yEnd - yTop) * v;
+        let r = rTop + (rBot - rTop) * Math.pow(v, 0.8);
+        let yy = y;
+        if (v > 0.78) { const t = (v - 0.78) / 0.22; r += flick * t * t; yy += flick * 0.35 * t * t; }   // ends flick outwards
+        pos.push(Math.sin(a) * r, yy, Math.cos(a) * r * 0.97); uv.push(u, 1 - v);
+      }
+    }
+    for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) { const p = i * (rows + 1) + j, q = p + rows + 1; idx.push(p, q, p + 1, q, q + 1, p + 1); }
+    const g2 = new THREE.BufferGeometry(); g2.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g2.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g2.setIndex(idx); g2.computeVertexNormals();
+    return g2;
+  }
+  H(sph(0.212, 32), hairMat, 0, 0.01, -0.025);   // crown under the bandana
+  H(hairShell({ a0: 0.6, a1: Math.PI * 2 - 0.6, cols: 64, yTop: 0.06, yBot: -0.3, rTop: 0.214, rBot: 0.235, jag: 0.018, flick: 0.012, seed: 1 }), hairMat, 0, 0, -0.01);
+  H(hairShell({ a0: 0.68, a1: Math.PI * 2 - 0.68, cols: 48, yTop: 0.0, yBot: -0.27, rTop: 0.222, rBot: 0.24, jag: 0.015, flick: 0.008, seed: 4 }), hairMat, 0, 0, -0.01);   // second layer for volume
+  [-1, 1].forEach(e => H(hairShell({ a0: e > 0 ? 0.38 : -0.78, a1: e > 0 ? 0.78 : -0.38, cols: 10, yTop: 0.05, yBot: -0.16, rTop: 0.21, rBot: 0.214, jag: 0.02, flick: 0, seed: 7 + e }), hairMat, 0, 0, 0));   // side locks framing the face
+  H(hairShell({ a0: -0.75, a1: 0.75, cols: 24, yTop: 0.09, yBot: 0.045, rTop: 0.2, rBot: 0.208, jag: 0.035, flick: 0.0, seed: 9 }), hairMat, 0, 0, 0);   // fringe under the bandana
+  // wrapped bandana: yellow with black patches and the snake, tied at the back
+  const capTex = canvasTex(1024, 256, (c, w, h) => {
+    c.fillStyle = '#1d1d1f'; c.fillRect(0, 0, w, h);                 // black back and right side
+    c.fillStyle = '#e8c21f'; c.fillRect(w * 0.18, 0, w * 0.36, h);   // yellow left side and front
+    c.fillStyle = '#e8c21f'; c.fillRect(w * 0.2, h * 0.72, w * 0.55, h * 0.28);   // slogan band runs across the brow
+    // coiled rattlesnake on the yellow side
+    const cx = w * 0.4, cy = h * 0.4; c.strokeStyle = '#2d4a24'; c.lineWidth = 10; c.lineCap = 'round';
+    c.beginPath(); for (let a = 0; a < Math.PI * 4; a += 0.08) { const r = 4 + a * 3.2; c.lineTo(cx + Math.cos(a) * r * 1.15, cy + 18 - a * 1.6 + Math.sin(a) * r * 0.45); } c.stroke();
+    c.fillStyle = '#2d4a24'; c.beginPath(); c.ellipse(cx + 18, cy - 30, 10, 7, -0.6, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = 'rgba(232,194,31,.35)'; c.lineWidth = 6; c.beginPath(); for (let a = 0; a < Math.PI * 3; a += 0.1) { const r = 4 + a * 3; c.lineTo(w * 0.66 + Math.cos(a) * r * 1.1, h * 0.38 + Math.sin(a) * r * 0.45); } c.stroke();   // faded snake on the black side
+    c.strokeStyle = 'rgba(0,0,0,.12)'; c.lineWidth = 3; for (let i = 0; i < 12; i++) { c.beginPath(); c.moveTo(Math.random() * w, Math.random() * h * 0.7); c.quadraticCurveTo(Math.random() * w, Math.random() * h, Math.random() * w, Math.random() * h * 0.7); c.stroke(); }
+    c.fillStyle = '#1d1d1f'; c.font = 'bold 34px Georgia, Times, serif'; c.textAlign = 'center'; c.fillText("DON'T TREAD ON ME", w * 0.47, h * 0.93);
+  });
+  const cap = H(new THREE.SphereGeometry(0.218, 48, 22, 0, Math.PI * 2, 0, Math.PI * 0.43), std('#ffffff', { map: capTex, roughness: 0.75 }), 0, 0.01, -0.01);
+  cap.rotation.y = -Math.PI / 2; cap.rotation.x = -0.06; cap.scale.set(1.03, 1.0, 1.03);
+  const rimB = H(new THREE.TorusGeometry(0.216, 0.01, 8, 44), std('#e8c21f', { roughness: 0.75 }), 0, 0.055, 0.0); rimB.rotation.x = Math.PI / 2 - 0.06;
+  const knot = H(sph(0.03, 14), std('#1d1d1f', { roughness: 0.75 }), 0, 0.05, -0.222); knot.scale.set(1.3, 1, 0.7);
+  [-1, 1].forEach(e => { const tail = H(new THREE.ConeGeometry(0.04, 0.17, 4), std(e > 0 ? '#1d1d1f' : '#e8c21f', { roughness: 0.75 }), e * 0.04, 0.0, -0.23); tail.rotation.set(Math.PI - 0.3, Math.PI / 4, e * 0.4); tail.scale.set(1, 1, 0.25); });
+  // big eyes glancing sideways, heavy flat brows, chunky white oval shades
+  [-1, 1].forEach(e => {
+    H(sph(0.058, 20), std('#f2efe9', { roughness: 0.35 }), e * 0.084, -0.035, 0.16).scale.set(1.1, 0.95, 0.45);
+    const iris = H(sph(0.042, 20), std('#6b625c', { roughness: 0.2 }), e * 0.084 - 0.017, -0.038, 0.175); iris.scale.set(1, 1.05, 0.4);
+    H(sph(0.024, 14), std('#141416', { roughness: 0.15 }), e * 0.084 - 0.019, -0.038, 0.183).scale.set(1, 1.05, 0.4);
+    H(sph(0.009, 8), std('#ffffff', { emissive: '#ffffff', emissiveIntensity: 0.7 }), e * 0.084 - 0.03, -0.02, 0.19);
+    const lid = H(new THREE.TorusGeometry(0.056, 0.008, 6, 20, Math.PI), std('#2a211c'), e * 0.084, -0.034, 0.17); lid.scale.set(1.1, 0.85, 1);   // dark upper lid
+    const frame = H(new THREE.TorusGeometry(0.058, 0.019, 12, 36), white, e * 0.09, -0.034, 0.2); frame.scale.set(1.12, 0.88, 1.1);
+    H(new THREE.CircleGeometry(0.057, 30), std('#2c2c30', { roughness: 0.05, metalness: 0.4, transparent: true, opacity: 0.22 }), e * 0.09, -0.034, 0.206).scale.set(1.1, 0.86, 1);
+    H(new THREE.BoxGeometry(0.018, 0.026, 0.17), white, e * 0.17, -0.02, 0.12).rotation.y = e * 0.12;
+    const brow = H(new THREE.BoxGeometry(0.075, 0.016, 0.012), std('#1a1514'), e * 0.09, e > 0 ? 0.045 : 0.037, 0.2); brow.rotation.z = e > 0 ? -0.16 : 0.04;   // one brow cocked
+  });
+  H(new THREE.BoxGeometry(0.03, 0.016, 0.022), white, 0, -0.028, 0.212);
+  H(sph(0.01, 8), skinShade, 0, -0.085, 0.186);
+  H(new THREE.BoxGeometry(0.022, 0.024, 0.008), std('#1a1514'), 0, -0.13, 0.165);   // tiny flat mouth
+  if (seated) { body.position.y = -0.62; g.scale.setScalar(1.3); }   // hips at the seat, sized to match the other drivers
   g.traverse(m => { if (m.isMesh) m.castShadow = true; });
   return g;
 }
