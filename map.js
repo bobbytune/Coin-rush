@@ -495,7 +495,12 @@ function buildMap(scene, renderer){
     if (nearLandmark(x, z, 3) || blocksView(x, z, 6)) continue;
     trees.push({ x, z, s: 0.8 + rand() * 0.6, roadside: distRoad(x, z) < (L.breakableTreeDistance || 14) });
   }
-  for (let i = 0; i < 90; i++) { const a = rand() * Math.PI * 2, r = L.size + 15 + rand() * 90, x = Math.cos(a) * r, z = Math.sin(a) * r; if (!inWater(x, z, 3)) trees.push({ x, z, s: 0.9 + rand() * 0.8, outside: true }); }
+  // a ring of trees beyond the edge wall: only outside the wall and well clear of the road
+  for (let i = 0; i < 90; i++) {
+    const a = rand() * Math.PI * 2, r = L.size + 15 + rand() * 90, x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (Math.max(Math.abs(x), Math.abs(z)) < L.size + 8 || inWater(x, z, 3) || distRoad(x, z) < 12) continue;
+    trees.push({ x, z, s: 0.9 + rand() * 0.8, outside: true });
+  }
   const round = T.treeStyle === 'round', perTree = round ? 4 : 3;
   const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.22, 0.34, 3.2, 7), mat(T.treeTrunk), trees.length);
   const crownGeo = round ? new THREE.SphereGeometry(1, 12, 9) : new THREE.ConeGeometry(1, 1, 9);
@@ -578,5 +583,5 @@ function buildMap(scene, renderer){
     return 'grass';
   }
   return { samples: S, N, ds: main.ds, total: main.length, half: HALF, shortcuts, ramps, solids, circles, water: L.water, edge: E - 1,
-    nearestIndex, nearestFull: (x, z) => nearestFull(S, x, z), surfaceAt, sky, followSun, breakables, breakIt, updateBreakables, resetBreakables };
+    nearestIndex, nearestFull: (x, z) => nearestFull(S, x, z), surfaceAt, sky, followSun, breakables, breakIt, updateBreakables, resetBreakables, trees: trees.map(t => ({ x: t.x, z: t.z, s: t.s, outside: !!t.outside })), bushes: bushes.map(([x, z, sc]) => ({ x, z, s: sc })) };
 }
