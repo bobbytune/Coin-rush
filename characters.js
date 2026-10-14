@@ -4,7 +4,7 @@
 
 // The drivers you can pick on the driver screen. Rivals get the others.
 const CHARACTERS = [
-  { id: 'house',  name: 'House Guy',    blurb: 'Straight out of Solangeles. Bricks for brains, heart of gold.' },
+  { id: 'house',  name: 'Chillhouse',   blurb: 'Pride of Solangeles. Bricks for brains, heart of gold.' },
   { id: 'ace',    name: 'Ace Turbo',    blurb: 'Pro racer. Never takes the helmet off. Suit matches the car.' },
   { id: 'robo',   name: 'Robo-9',       blurb: 'Calculates the racing line to twelve decimal places.' },
   { id: 'granny', name: 'Granny Gears', blurb: 'Eighty-four years young and still flooring it.' },

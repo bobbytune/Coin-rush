@@ -90,6 +90,7 @@ const MAP_LAYOUT = {
     { type: 'pillTower', at: [100, -88] },   // east
     { type: 'pillTower', at: [0, -152] },    // south
     { type: 'pillTower', at: [-200, 0] },    // west
+    { type: 'chillhouseStatue', at: [-198, 178], face: [1, 0] },   // north-west corner, facing the top straight
   ],
 };
 // =====================================================================
@@ -310,6 +311,53 @@ function buildMap(scene, renderer){
     circles.push({ x: l.x, z: l.z, r: R * 0.92 });
   }
 
+  // ---------- landmark: the Chillhouse statue (painted) ----------
+  function buildChillhouseStatue(l){
+    const g = new THREE.Group(); g.position.set(l.x, 0, l.z); scene.add(g);
+    if (l.face) g.rotation.y = Math.atan2(l.face[0], l.face[1]);
+    const std = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.55, metalness: 0.03 }, o || {}));
+    const M = (geo, m, x, y, z, parent) => { const me = new THREE.Mesh(geo, m); me.position.set(x, y, z); me.castShadow = true; me.receiveShadow = true; (parent || g).add(me); return me; };
+    const brick = std('#e2c49a'), roofC = std('#b5523b'), roofDark = std('#8f3e2c'), chim = std('#c9ad8a'), sweater = std('#7d8496'), sweaterDark = std('#6a7082'),
+      jeans = std('#7fa6a0'), jeansDark = std('#6a8f89'), shoe = std('#8a5232'), sole = std('#efe7da'), eyeW = std('#f6f3ea'), ink = std('#2a211a'), nose = std('#c0703f');
+    const P = new THREE.Group(); g.add(P); P.scale.setScalar(6);
+    const A = (geo, m, x, y, z) => M(geo, m, x, y, z, P);
+    const sc = (m, x, y, z) => { m.scale.set(x, y, z); return m; };
+    const seg = (a, b, r1, r2, m) => { const va = new THREE.Vector3(...a), vb = new THREE.Vector3(...b);
+      const me = A(new THREE.CylinderGeometry(r2, r1, va.distanceTo(vb), 18), m, (va.x + vb.x) / 2, (va.y + vb.y) / 2, (va.z + vb.z) / 2); me.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vb.clone().sub(va).normalize());
+      A(new THREE.SphereGeometry(r2, 16, 12), m, vb.x, vb.y, vb.z); };
+    const base = 4.2 / 6;
+    [-0.15, 0.15].forEach(x => { sc(A(new THREE.SphereGeometry(0.12, 18, 12), shoe, x, base + 0.07, 0.05), 1.05, 0.62, 1.7); sc(A(new THREE.SphereGeometry(0.125, 18, 12), sole, x, base + 0.03, 0.05), 1.1, 0.28, 1.75);
+      seg([x, base + 0.16, 0], [x, base + 0.78, 0], 0.11, 0.115, jeans); A(new THREE.CylinderGeometry(0.13, 0.13, 0.08, 18), jeansDark, x, base + 0.19, 0); });
+    sc(A(new THREE.SphereGeometry(0.25, 20, 14), jeans, 0, base + 0.82, 0), 1.25, 0.6, 0.85);
+    sc(A(new THREE.CylinderGeometry(0.27, 0.32, 0.6, 24), sweater, 0, base + 1.12, 0), 1.05, 1, 0.82);
+    sc(A(new THREE.CylinderGeometry(0.33, 0.33, 0.1, 24), sweaterDark, 0, base + 0.85, 0), 1.05, 1, 0.84);
+    sc(A(new THREE.SphereGeometry(0.3, 20, 14), sweater, 0, base + 1.42, 0), 1.25, 0.5, 0.85);
+    A(new THREE.CylinderGeometry(0.15, 0.17, 0.06, 18), sweaterDark, 0, base + 1.52, 0);
+    [-1, 1].forEach(e => { const sh = [e * 0.36, base + 1.38, 0], el = [e * 0.42, base + 1.06, -0.02], hand = [e * 0.27, base + 0.86, 0.12];
+      seg(sh, el, 0.105, 0.1, sweater); seg(el, hand, 0.1, 0.095, sweater); A(new THREE.CylinderGeometry(0.1, 0.1, 0.07, 14), sweaterDark, hand[0], hand[1] + 0.03, hand[2]).rotation.x = 0.6; });
+    const hy = base + 1.85, hw = 0.68;
+    A(new THREE.BoxGeometry(hw, 0.6, 0.62), brick, 0, hy, 0);
+    for (let r = -2; r <= 2; r++) A(new THREE.BoxGeometry(hw + 0.01, 0.012, 0.63), std('#c8a77d'), 0, hy + r * 0.11, 0);
+    const tri = new THREE.Shape(); tri.moveTo(-0.46, 0); tri.lineTo(0.46, 0); tri.lineTo(0, 0.42); tri.lineTo(-0.46, 0);
+    A(new THREE.ExtrudeGeometry(tri, { depth: 0.82, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02, bevelSegments: 1 }), roofC, 0, hy + 0.3, -0.41);
+    for (let k = 0; k < 4; k++) [-1, 1].forEach(e => { A(new THREE.BoxGeometry(0.02, 0.012, 0.84), roofDark, e * (0.09 + k * 0.1), hy + 0.3 + 0.42 - (0.09 + k * 0.1) * 0.91, 0).rotation.z = e * -0.74; });
+    A(new THREE.BoxGeometry(0.13, 0.32, 0.13), chim, 0.2, hy + 0.66, -0.1); A(new THREE.BoxGeometry(0.17, 0.05, 0.17), chim, 0.2, hy + 0.84, -0.1);
+    [-1, 1].forEach(e => { A(new THREE.BoxGeometry(0.2, 0.2, 0.02), ink, e * 0.16, hy + 0.08, 0.312); A(new THREE.BoxGeometry(0.16, 0.16, 0.025), eyeW, e * 0.16, hy + 0.08, 0.316); A(new THREE.BoxGeometry(0.045, 0.1, 0.03), ink, e * 0.16, hy + 0.07, 0.322); });
+    sc(A(new THREE.SphereGeometry(0.09, 18, 12), nose, -0.03, hy - 0.06, 0.36), 1.35, 0.95, 0.85);
+    A(new THREE.TorusGeometry(0.08, 0.012, 8, 16, Math.PI * 0.85), ink, 0.02, hy - 0.11, 0.315).rotation.z = Math.PI + 0.25;
+    // plinth, plaque, plaza and planters
+    const stone = std('#d8d2c4', { roughness: 0.85 }), stoneDark = std('#bdb6a6', { roughness: 0.85 });
+    M(new THREE.BoxGeometry(11, 0.8, 11), stoneDark, 0, 0.4, 0); M(new THREE.BoxGeometry(9, 3.2, 9), stone, 0, 2.4, 0); M(new THREE.BoxGeometry(9.6, 0.4, 9.6), stoneDark, 0, 4.0, 0);
+    const pc = document.createElement('canvas'); pc.width = 512; pc.height = 160; const c = pc.getContext('2d');
+    c.fillStyle = '#b08d57'; c.fillRect(0, 0, 512, 160); c.strokeStyle = '#6b5230'; c.lineWidth = 8; c.strokeRect(8, 8, 496, 144);
+    c.fillStyle = '#3d2c14'; c.textAlign = 'center'; c.font = 'bold 54px Georgia, serif'; c.fillText('CHILLHOUSE', 256, 72); c.font = '30px Georgia, serif'; c.fillText('Pride of Solangeles', 256, 122);
+    M(new THREE.BoxGeometry(5, 1.6, 0.1), std('#ffffff', { map: new THREE.CanvasTexture(pc), metalness: 0.4, roughness: 0.4 }), 0, 2.4, 4.53);
+    M(new THREE.CylinderGeometry(13, 13, 0.25, 48), std('#cfcfcf', { roughness: 0.9 }), 0, 0.12, 0);
+    [[-10, 6], [10, 6], [-10, -6], [10, -6]].forEach(([x, z]) => { M(new THREE.CylinderGeometry(1.4, 1.6, 1, 16), stone, x, 0.5, z);
+      [[0, 1.6, 0, 1.2], [0.6, 1.4, 0.3, 0.9], [-0.5, 1.4, -0.3, 0.9]].forEach(([dx, y, dz, r]) => M(new THREE.SphereGeometry(r, 12, 9), std(T.treeLeaves), x + dx, y, z + dz)); });
+    circles.push({ x: l.x, z: l.z, r: 7.2 });   // crash into the plinth
+  }
+
   // ---------- scenery ----------
   const distRoad = (x, z) => {
     let d = nearestFull(S, x, z).d - HALF - 1.5;
@@ -318,9 +366,9 @@ function buildMap(scene, renderer){
   };
   const styleAt = (x, z) => { const d = L.districts.find(d => x >= d.area[0] && x <= d.area[1] && z >= d.area[2] && z <= d.area[3]); return T.styles[d ? d.style : 'town']; };
   const solids = [], circles = [], lim = L.size - 8;
-  const landmarks = (L.landmarks || []).map(l => ({ x: l.at[0], z: l.at[1], r: 17, type: l.type }));
+  const landmarks = (L.landmarks || []).map(l => ({ x: l.at[0], z: l.at[1], r: l.type === 'chillhouseStatue' ? 15 : 17, type: l.type, face: l.face }));
   const nearLandmark = (x, z, pad) => landmarks.some(l => Math.hypot(x - l.x, z - l.z) < l.r + pad);
-  landmarks.forEach(l => { if (l.type === 'pillTower') buildPillTower(l); });
+  landmarks.forEach(l => { if (l.type === 'pillTower') buildPillTower(l); if (l.type === 'chillhouseStatue') buildChillhouseStatue(l); });
   let tries = 0;
   while (solids.length < L.buildings && tries++ < L.buildings * 60) {
     const x = (rand() * 2 - 1) * lim, z = (rand() * 2 - 1) * lim, st = styleAt(x, z);
