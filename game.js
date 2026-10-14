@@ -300,12 +300,17 @@ function collideWorld(c){
     const dx = c.x - t.x, dz = c.z - t.z, rr = R + t.r;
     if (Math.abs(dx) > rr || Math.abs(dz) > rr) continue;
     const d = Math.hypot(dx, dz); if (d >= rr || d < 1e-4) continue;
-    if (t.lamp !== undefined) {
-      if (MAP.lamps[t.lamp].broken) continue;
+    if (t.brk !== undefined) {
+      const b = MAP.breakables[t.brk];
+      if (b.broken) continue;
       const sp = Math.hypot(c.vx, c.vz);
-      if (sp > 6 && MAP.breakLamp(t.lamp, c.vx, c.vz, sp)) {   // fast enough: snap it and carry on with a small loss of speed
-        c.vx *= 0.85; c.vz *= 0.85;
-        if (c.player) { shake = Math.min(0.5, sp / 80); blip(260, 70, 0.22, 0.16, 'sawtooth'); setTimeout(() => blip(900, 300, 0.12, 0.06, 'square'), 380); lampsBroken++; }
+      if (sp > b.minSpeed && MAP.breakIt(t.brk, c.vx, c.vz, sp)) {   // fast enough: knock it over and carry on, a bit slower
+        c.vx *= b.slow; c.vz *= b.slow;
+        if (c.player) {
+          shake = Math.min(b.kind === 'tree' ? 0.8 : 0.5, sp / 70);
+          if (b.kind === 'tree') { blip(180, 50, 0.3, 0.2, 'sawtooth'); blip(1200, 400, 0.15, 0.05, 'triangle'); setTimeout(() => blip(110, 40, 0.35, 0.2, 'sawtooth'), 600); treesBroken++; }
+          else { blip(260, 70, 0.22, 0.16, 'sawtooth'); setTimeout(() => blip(900, 300, 0.12, 0.06, 'square'), 380); lampsBroken++; }
+        }
         continue;
       }
     }
@@ -437,9 +442,9 @@ function checkWrongWay(dt){
 
 // ---------- game flow ----------
 let state = 'menu', raceTime = 0, countdown = 0, lastCount = 0;
-let lampsBroken = 0;
+let lampsBroken = 0, treesBroken = 0;
 function resetRace(){
-  MAP.resetLamps(); lampsBroken = 0;
+  MAP.resetBreakables(); lampsBroken = 0; treesBroken = 0;
   racers.forEach(c => { placeOnGrid(c); c.topMul = c.skill; c.lapShown = 0; });
   coins.forEach(k => { k.active = true; });
   boostMeter = 0; totalCoins = 0; raceTime = 0; $('coinCount').textContent = '0';
@@ -526,12 +531,18 @@ addEventListener('keydown', e => {
   if (e.code === 'ArrowRight' || e.code === 'KeyD') stepCar(1);
   if (e.code === 'Enter' && document.activeElement === document.body) startRace();
 });
+function smashText(){
+  const bits = [];
+  if (lampsBroken) bits.push(`${lampsBroken} lamp post${lampsBroken > 1 ? 's' : ''}`);
+  if (treesBroken) bits.push(`${treesBroken} tree${treesBroken > 1 ? 's' : ''}`);
+  return bits.length ? `, and ${bits.join(' and ')} flattened` : '';
+}
 function finishRace(){
   state = 'finished';
   setTimeout(() => {
     const order = racers.slice().sort((a, b) => progress(b) - progress(a));
     $('resTitle').textContent = player.place === 1 ? '1st place!' : ord(player.place) + ' place';
-    $('resSub').textContent = `Finished in ${fmt(player.finishTime)} with ${totalCoins} ${COIN_SETTINGS.name || 'pickups'} collected${lampsBroken ? `, and ${lampsBroken} lamp post${lampsBroken > 1 ? 's' : ''} flattened` : ''}.`;
+    $('resSub').textContent = `Finished in ${fmt(player.finishTime)} with ${totalCoins} ${COIN_SETTINGS.name || 'pickups'} collected${smashText()}.`;
     $('resTable').innerHTML = order.map((c, i) => `<tr class="${c.player ? 'me' : ''}"><td>${ord(i + 1)}</td><td><span class="dot" style="background:${c.color}"></span>${c.player && PICK_DRIVER ? `You <small style="opacity:.7">(${charById(c.driver).name})</small>` : c.name}</td><td>${c.finished ? fmt(c.finishTime) : 'Still racing'}</td></tr>`).join('');
     $('results').hidden = false; $('againBtn').focus();
   }, 1600);
@@ -569,7 +580,7 @@ function frame(now){
       updateHeight(c, dt);
     });
     collideCars();
-    MAP.updateLamps(dt);
+    MAP.updateBreakables(dt);
     racers.forEach(c => { updateProgress(c); if (!c.finished) checkLaps(c); });
     if (state === 'race') { checkWrongWay(dt); checkStuckHint(dt); }
     coins.forEach(k => {

@@ -84,6 +84,7 @@ const MAP_LAYOUT = {
   buildings: 190,
   trees: 220,
   seed: 11,          // change to shuffle where buildings and trees go
+  breakableTreeDistance: 14,   // trees closer than this (metres from the road edge) can be knocked over
   // Landmarks: big one-off buildings. 'at' is [x, z]; they turn to face the track.
   landmarks: [
     { type: 'pillTower', at: [0, 156] },     // north
@@ -447,6 +448,42 @@ function buildMap(scene, renderer){
   flatRoofs.count = fi; peakRoofs.count = pi; chimneys.count = pi; units.count = ui;
   [flatRoofs, peakRoofs, chimneys, units].forEach(m => { m.castShadow = true; m.receiveShadow = true; scene.add(m); });
 
+  // ---------- knock-over-able things (lamp posts, roadside trees) ----------
+  // each one is a list of instanced parts stored relative to its base, so it can tip over as one piece
+  const breakables = [], breakMeshes = new Set();
+  const pivot = new THREE.Object3D(), axis = new THREE.Vector3(), tmp = new THREE.Matrix4(), toLocal = new THREE.Matrix4();
+  function addBreakable(kind, x, z, r, parts, opts){
+    toLocal.makeTranslation(-x, 0, -z);
+    const b = Object.assign({ kind, x, z, broken: false, fall: 0, fallVel: 0, dirX: 0, dirZ: 1, minSpeed: 6, slow: 0.85, gravity: 6, maxFall: Math.PI / 2 - 0.02 }, opts || {},
+      { parts: parts.map(([mesh, index, world]) => { breakMeshes.add(mesh); return { mesh, index, local: toLocal.clone().multiply(world) }; }) });
+    breakables.push(b);
+    circles.push({ x, z, r, brk: breakables.length - 1 });
+    return b;
+  }
+  function poseBreakable(b){
+    pivot.position.set(b.x, 0, b.z);
+    if (b.fall > 0) pivot.quaternion.setFromAxisAngle(axis.set(b.dirZ, 0, -b.dirX).normalize(), b.fall); else pivot.quaternion.identity();
+    pivot.updateMatrix();
+    b.parts.forEach(p => { tmp.multiplyMatrices(pivot.matrix, p.local); p.mesh.setMatrixAt(p.index, tmp); });
+  }
+  function breakIt(i, dx, dz, speed){
+    const b = breakables[i]; if (b.broken) return false;
+    const d = Math.hypot(dx, dz) || 1; b.dirX = dx / d; b.dirZ = dz / d;
+    b.broken = true; b.fallVel = 0.5 + Math.min(1.6, speed * 0.03); return true;
+  }
+  function updateBreakables(dt){
+    const dirty = new Set();
+    breakables.forEach(b => {
+      if (!b.broken || (b.fall >= b.maxFall && b.fallVel === 0)) return;
+      b.fallVel += b.gravity * Math.sin(b.fall + 0.15) * dt;   // speeds up as it tips
+      b.fall += b.fallVel * dt;
+      if (b.fall >= b.maxFall) { b.fall = b.maxFall; b.fallVel = Math.abs(b.fallVel) > 1.2 ? -Math.abs(b.fallVel) * 0.2 : 0; }   // small bounce on landing
+      poseBreakable(b); b.parts.forEach(p => dirty.add(p.mesh));
+    });
+    dirty.forEach(m => { m.instanceMatrix.needsUpdate = true; });
+  }
+  function resetBreakables(){ breakables.forEach(b => { b.broken = false; b.fall = 0; b.fallVel = 0; poseBreakable(b); }); breakMeshes.forEach(m => { m.instanceMatrix.needsUpdate = true; }); }
+
   // trees: fluffy clusters of spheres (or stacked cones for pines)
   const trees = [];
   tries = 0;
@@ -456,7 +493,7 @@ function buildMap(scene, renderer){
     if (distRoad(x, z) < 7 || inWater(x, z, 4)) continue;
     if (solids.some(b => x > b.minX - 3 && x < b.maxX + 3 && z > b.minZ - 3 && z < b.maxZ + 3)) continue;
     if (nearLandmark(x, z, 3) || blocksView(x, z, 6)) continue;
-    trees.push({ x, z, s: 0.8 + rand() * 0.6 });
+    trees.push({ x, z, s: 0.8 + rand() * 0.6, roadside: distRoad(x, z) < (L.breakableTreeDistance || 14) });
   }
   for (let i = 0; i < 90; i++) { const a = rand() * Math.PI * 2, r = L.size + 15 + rand() * 90, x = Math.cos(a) * r, z = Math.sin(a) * r; if (!inWater(x, z, 3)) trees.push({ x, z, s: 0.9 + rand() * 0.8, outside: true }); }
   const round = T.treeStyle === 'round', perTree = round ? 4 : 3;
@@ -466,8 +503,9 @@ function buildMap(scene, renderer){
   const leaf = new THREE.Color(T.treeLeaves);
   let ci = 0;
   trees.forEach((t, k) => {
+    const parts = [];
     o.rotation.set(0, rand() * 6, 0); o.scale.set(t.s, t.s, t.s);
-    o.position.set(t.x, 1.6 * t.s, t.z); o.updateMatrix(); trunks.setMatrixAt(k, o.matrix);
+    o.position.set(t.x, 1.6 * t.s, t.z); o.updateMatrix(); trunks.setMatrixAt(k, o.matrix); parts.push([trunks, k, o.matrix.clone()]);
     for (let j = 0; j < perTree; j++) {
       if (round) {
         const big = j === 0, r = (big ? 2.4 : 1.5 + rand() * 0.6) * t.s;
@@ -475,11 +513,13 @@ function buildMap(scene, renderer){
       } else {
         const r = (2.6 - j * 0.7) * t.s; o.position.set(t.x, (3.4 + j * 1.7) * t.s, t.z); o.scale.set(r, 3.2 * t.s, r);
       }
-      o.updateMatrix(); crowns.setMatrixAt(ci, o.matrix); col.copy(leaf).multiplyScalar(0.82 + rand() * 0.3); crowns.setColorAt(ci++, col);
+      o.updateMatrix(); crowns.setMatrixAt(ci, o.matrix); parts.push([crowns, ci, o.matrix.clone()]); col.copy(leaf).multiplyScalar(0.82 + rand() * 0.3); crowns.setColorAt(ci++, col);
     }
-    if (!t.outside) circles.push({ x: t.x, z: t.z, r: 0.9 * t.s });
+    if (t.roadside) addBreakable('tree', t.x, t.z, 0.9 * t.s, parts, { minSpeed: 9, slow: 0.72, gravity: 4.5, maxFall: Math.PI / 2 - 0.12 });   // heavier: needs more speed, costs more speed, falls slower
+    else if (!t.outside) circles.push({ x: t.x, z: t.z, r: 0.9 * t.s });
   });
   trunks.castShadow = true; crowns.castShadow = true; crowns.receiveShadow = true;
+  [trunks, crowns].forEach(m => m.instanceMatrix.setUsage(THREE.DynamicDrawUsage));
   scene.add(trunks); scene.add(crowns);
 
   // bushes dotted about the grass
@@ -505,48 +545,18 @@ function buildMap(scene, renderer){
     if (shortcuts.some(sc => nearestFull(sc.samples, x, z).d < sc.half + 4)) continue;
     if (solids.some(b => x > b.minX - 1 && x < b.maxX + 1 && z > b.minZ - 1 && z < b.maxZ + 1)) continue;
     lamps.push({ x, z, ang: Math.atan2(-s.tz * -side, s.tx * -side) });
-    circles.push({ x, z, r: 0.35, lamp: lamps.length - 1 });
   }
   const poles = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.18, 7.5, 8), mat('#3b3f4f'), lamps.length);
   const arms = new THREE.InstancedMesh(new THREE.BoxGeometry(0.14, 0.14, 2.4), mat('#3b3f4f'), lamps.length);
   const heads = new THREE.InstancedMesh(new THREE.BoxGeometry(0.7, 0.22, 1.1), mat('#fff3c4', { emissive: '#ffe9a8', emissiveIntensity: 0.6 }), lamps.length);
-  // each lamp's parts are stored relative to its base so the whole lamp can be tipped over as one piece
   const lampParts = [poles, arms, heads];
-  lamps.forEach(l => {
-    const fx = Math.sin(l.ang), fz = Math.cos(l.ang);
+  lamps.forEach((l, k) => {
+    const fx = Math.sin(l.ang), fz = Math.cos(l.ang), parts = [];
     o.scale.set(1, 1, 1); o.rotation.set(0, l.ang, 0);
-    l.local = [[0, 3.75, 0], [fx * 1.1, 7.4, fz * 1.1], [fx * 2.2, 7.3, fz * 2.2]].map(([x, y, z]) => { o.position.set(x, y, z); o.updateMatrix(); return o.matrix.clone(); });
-    l.fall = 0; l.fallVel = 0; l.dirX = 0; l.dirZ = 1; l.broken = false;
+    [[0, 3.75, 0], [fx * 1.1, 7.4, fz * 1.1], [fx * 2.2, 7.3, fz * 2.2]].forEach(([x, y, z], j) => { o.position.set(l.x + x, y, l.z + z); o.updateMatrix(); lampParts[j].setMatrixAt(k, o.matrix); parts.push([lampParts[j], k, o.matrix.clone()]); });
+    addBreakable('lamp', l.x, l.z, 0.35, parts);
   });
-  const pivot = new THREE.Object3D(), axis = new THREE.Vector3(), tmp = new THREE.Matrix4();
-  function poseLamp(k){
-    const l = lamps[k];
-    pivot.position.set(l.x, 0, l.z);
-    if (l.fall > 0) pivot.quaternion.setFromAxisAngle(axis.set(l.dirZ, 0, -l.dirX).normalize(), l.fall); else pivot.quaternion.identity();
-    pivot.updateMatrix();
-    lampParts.forEach((m, j) => { tmp.multiplyMatrices(pivot.matrix, l.local[j]); m.setMatrixAt(k, tmp); });
-  }
-  lamps.forEach((l, k) => poseLamp(k));
   lampParts.forEach(m => { m.castShadow = true; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(m); });
-  // knock a lamp over in the direction (dx, dz)
-  function breakLamp(k, dx, dz, speed){
-    const l = lamps[k]; if (l.broken) return false;
-    const d = Math.hypot(dx, dz) || 1; l.dirX = dx / d; l.dirZ = dz / d;
-    l.broken = true; l.fallVel = 0.5 + Math.min(1.6, speed * 0.03); return true;
-  }
-  // animate falling lamps; returns true if anything moved
-  function updateLamps(dt){
-    let moved = false;
-    lamps.forEach((l, k) => {
-      if (!l.broken || l.fall >= Math.PI / 2 - 0.02 && l.fallVel === 0) return;
-      l.fallVel += 6 * Math.sin(l.fall + 0.15) * dt;   // gravity pulls it down faster as it tips
-      l.fall += l.fallVel * dt;
-      if (l.fall >= Math.PI / 2 - 0.02) { l.fall = Math.PI / 2 - 0.02; l.fallVel = Math.abs(l.fallVel) > 1.2 ? -Math.abs(l.fallVel) * 0.2 : 0; }   // small bounce on landing
-      poseLamp(k); moved = true;
-    });
-    if (moved) lampParts.forEach(m => { m.instanceMatrix.needsUpdate = true; });
-  }
-  function resetLamps(){ lamps.forEach((l, k) => { l.broken = false; l.fall = 0; l.fallVel = 0; poseLamp(k); }); lampParts.forEach(m => { m.instanceMatrix.needsUpdate = true; }); }
 
   // edge wall
   const E = L.size;
@@ -568,5 +578,5 @@ function buildMap(scene, renderer){
     return 'grass';
   }
   return { samples: S, N, ds: main.ds, total: main.length, half: HALF, shortcuts, ramps, solids, circles, water: L.water, edge: E - 1,
-    nearestIndex, nearestFull: (x, z) => nearestFull(S, x, z), surfaceAt, sky, followSun, lamps, breakLamp, updateLamps, resetLamps };
+    nearestIndex, nearestFull: (x, z) => nearestFull(S, x, z), surfaceAt, sky, followSun, breakables, breakIt, updateBreakables, resetBreakables };
 }
