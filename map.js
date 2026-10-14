@@ -505,19 +505,48 @@ function buildMap(scene, renderer){
     if (shortcuts.some(sc => nearestFull(sc.samples, x, z).d < sc.half + 4)) continue;
     if (solids.some(b => x > b.minX - 1 && x < b.maxX + 1 && z > b.minZ - 1 && z < b.maxZ + 1)) continue;
     lamps.push({ x, z, ang: Math.atan2(-s.tz * -side, s.tx * -side) });
-    circles.push({ x, z, r: 0.25 });
+    circles.push({ x, z, r: 0.35, lamp: lamps.length - 1 });
   }
   const poles = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.18, 7.5, 8), mat('#3b3f4f'), lamps.length);
   const arms = new THREE.InstancedMesh(new THREE.BoxGeometry(0.14, 0.14, 2.4), mat('#3b3f4f'), lamps.length);
   const heads = new THREE.InstancedMesh(new THREE.BoxGeometry(0.7, 0.22, 1.1), mat('#fff3c4', { emissive: '#ffe9a8', emissiveIntensity: 0.6 }), lamps.length);
-  lamps.forEach((l, k) => {
-    o.scale.set(1, 1, 1); o.rotation.set(0, l.ang, 0);
-    o.position.set(l.x, 3.75, l.z); o.updateMatrix(); poles.setMatrixAt(k, o.matrix);
+  // each lamp's parts are stored relative to its base so the whole lamp can be tipped over as one piece
+  const lampParts = [poles, arms, heads];
+  lamps.forEach(l => {
     const fx = Math.sin(l.ang), fz = Math.cos(l.ang);
-    o.position.set(l.x + fx * 1.1, 7.4, l.z + fz * 1.1); o.updateMatrix(); arms.setMatrixAt(k, o.matrix);
-    o.position.set(l.x + fx * 2.2, 7.3, l.z + fz * 2.2); o.updateMatrix(); heads.setMatrixAt(k, o.matrix);
+    o.scale.set(1, 1, 1); o.rotation.set(0, l.ang, 0);
+    l.local = [[0, 3.75, 0], [fx * 1.1, 7.4, fz * 1.1], [fx * 2.2, 7.3, fz * 2.2]].map(([x, y, z]) => { o.position.set(x, y, z); o.updateMatrix(); return o.matrix.clone(); });
+    l.fall = 0; l.fallVel = 0; l.dirX = 0; l.dirZ = 1; l.broken = false;
   });
-  [poles, arms, heads].forEach(m => { m.castShadow = true; scene.add(m); });
+  const pivot = new THREE.Object3D(), axis = new THREE.Vector3(), tmp = new THREE.Matrix4();
+  function poseLamp(k){
+    const l = lamps[k];
+    pivot.position.set(l.x, 0, l.z);
+    if (l.fall > 0) pivot.quaternion.setFromAxisAngle(axis.set(l.dirZ, 0, -l.dirX).normalize(), l.fall); else pivot.quaternion.identity();
+    pivot.updateMatrix();
+    lampParts.forEach((m, j) => { tmp.multiplyMatrices(pivot.matrix, l.local[j]); m.setMatrixAt(k, tmp); });
+  }
+  lamps.forEach((l, k) => poseLamp(k));
+  lampParts.forEach(m => { m.castShadow = true; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(m); });
+  // knock a lamp over in the direction (dx, dz)
+  function breakLamp(k, dx, dz, speed){
+    const l = lamps[k]; if (l.broken) return false;
+    const d = Math.hypot(dx, dz) || 1; l.dirX = dx / d; l.dirZ = dz / d;
+    l.broken = true; l.fallVel = 0.5 + Math.min(1.6, speed * 0.03); return true;
+  }
+  // animate falling lamps; returns true if anything moved
+  function updateLamps(dt){
+    let moved = false;
+    lamps.forEach((l, k) => {
+      if (!l.broken || l.fall >= Math.PI / 2 - 0.02 && l.fallVel === 0) return;
+      l.fallVel += 6 * Math.sin(l.fall + 0.15) * dt;   // gravity pulls it down faster as it tips
+      l.fall += l.fallVel * dt;
+      if (l.fall >= Math.PI / 2 - 0.02) { l.fall = Math.PI / 2 - 0.02; l.fallVel = Math.abs(l.fallVel) > 1.2 ? -Math.abs(l.fallVel) * 0.2 : 0; }   // small bounce on landing
+      poseLamp(k); moved = true;
+    });
+    if (moved) lampParts.forEach(m => { m.instanceMatrix.needsUpdate = true; });
+  }
+  function resetLamps(){ lamps.forEach((l, k) => { l.broken = false; l.fall = 0; l.fallVel = 0; poseLamp(k); }); lampParts.forEach(m => { m.instanceMatrix.needsUpdate = true; }); }
 
   // edge wall
   const E = L.size;
@@ -539,5 +568,5 @@ function buildMap(scene, renderer){
     return 'grass';
   }
   return { samples: S, N, ds: main.ds, total: main.length, half: HALF, shortcuts, ramps, solids, circles, water: L.water, edge: E - 1,
-    nearestIndex, nearestFull: (x, z) => nearestFull(S, x, z), surfaceAt, sky, followSun };
+    nearestIndex, nearestFull: (x, z) => nearestFull(S, x, z), surfaceAt, sky, followSun, lamps, breakLamp, updateLamps, resetLamps };
 }

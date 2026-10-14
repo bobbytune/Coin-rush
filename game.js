@@ -300,6 +300,15 @@ function collideWorld(c){
     const dx = c.x - t.x, dz = c.z - t.z, rr = R + t.r;
     if (Math.abs(dx) > rr || Math.abs(dz) > rr) continue;
     const d = Math.hypot(dx, dz); if (d >= rr || d < 1e-4) continue;
+    if (t.lamp !== undefined) {
+      if (MAP.lamps[t.lamp].broken) continue;
+      const sp = Math.hypot(c.vx, c.vz);
+      if (sp > 6 && MAP.breakLamp(t.lamp, c.vx, c.vz, sp)) {   // fast enough: snap it and carry on with a small loss of speed
+        c.vx *= 0.85; c.vz *= 0.85;
+        if (c.player) { shake = Math.min(0.5, sp / 80); blip(260, 70, 0.22, 0.16, 'sawtooth'); setTimeout(() => blip(900, 300, 0.12, 0.06, 'square'), 380); lampsBroken++; }
+        continue;
+      }
+    }
     const nx = dx / d, nz = dz / d; c.x = t.x + nx * rr; c.z = t.z + nz * rr; hitWall(c, nx, nz);
   }
   const E = MAP.edge;
@@ -428,7 +437,9 @@ function checkWrongWay(dt){
 
 // ---------- game flow ----------
 let state = 'menu', raceTime = 0, countdown = 0, lastCount = 0;
+let lampsBroken = 0;
 function resetRace(){
+  MAP.resetLamps(); lampsBroken = 0;
   racers.forEach(c => { placeOnGrid(c); c.topMul = c.skill; c.lapShown = 0; });
   coins.forEach(k => { k.active = true; });
   boostMeter = 0; totalCoins = 0; raceTime = 0; $('coinCount').textContent = '0';
@@ -520,7 +531,7 @@ function finishRace(){
   setTimeout(() => {
     const order = racers.slice().sort((a, b) => progress(b) - progress(a));
     $('resTitle').textContent = player.place === 1 ? '1st place!' : ord(player.place) + ' place';
-    $('resSub').textContent = `Finished in ${fmt(player.finishTime)} with ${totalCoins} ${COIN_SETTINGS.name || 'pickups'} collected.`;
+    $('resSub').textContent = `Finished in ${fmt(player.finishTime)} with ${totalCoins} ${COIN_SETTINGS.name || 'pickups'} collected${lampsBroken ? `, and ${lampsBroken} lamp post${lampsBroken > 1 ? 's' : ''} flattened` : ''}.`;
     $('resTable').innerHTML = order.map((c, i) => `<tr class="${c.player ? 'me' : ''}"><td>${ord(i + 1)}</td><td><span class="dot" style="background:${c.color}"></span>${c.player && PICK_DRIVER ? `You <small style="opacity:.7">(${charById(c.driver).name})</small>` : c.name}</td><td>${c.finished ? fmt(c.finishTime) : 'Still racing'}</td></tr>`).join('');
     $('results').hidden = false; $('againBtn').focus();
   }, 1600);
@@ -558,6 +569,7 @@ function frame(now){
       updateHeight(c, dt);
     });
     collideCars();
+    MAP.updateLamps(dt);
     racers.forEach(c => { updateProgress(c); if (!c.finished) checkLaps(c); });
     if (state === 'race') { checkWrongWay(dt); checkStuckHint(dt); }
     coins.forEach(k => {
