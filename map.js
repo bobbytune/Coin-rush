@@ -90,7 +90,7 @@ const MAP_LAYOUT = {
     { type: 'pillTower', at: [100, -88] },   // east
     { type: 'pillTower', at: [0, -152] },    // south
     { type: 'pillTower', at: [-200, 0] },    // west
-    { type: 'chillhouseStatue', at: [-198, 178], face: [1, 0] },   // north-west corner, facing the top straight
+    { type: 'chillhouseStatue', at: [-193, 174], face: [1, 0.15], size: 8, clearView: true },   // north-west corner, facing the top straight
   ],
 };
 // =====================================================================
@@ -319,13 +319,14 @@ function buildMap(scene, renderer){
     const M = (geo, m, x, y, z, parent) => { const me = new THREE.Mesh(geo, m); me.position.set(x, y, z); me.castShadow = true; me.receiveShadow = true; (parent || g).add(me); return me; };
     const brick = std('#e2c49a'), roofC = std('#b5523b'), roofDark = std('#8f3e2c'), chim = std('#c9ad8a'), sweater = std('#7d8496'), sweaterDark = std('#6a7082'),
       jeans = std('#7fa6a0'), jeansDark = std('#6a8f89'), shoe = std('#8a5232'), sole = std('#efe7da'), eyeW = std('#f6f3ea'), ink = std('#2a211a'), nose = std('#c0703f');
-    const P = new THREE.Group(); g.add(P); P.scale.setScalar(6);
+    const k = (l.size || 6) / 6, plinthTop = 4.2 * k;
+    const P = new THREE.Group(); g.add(P); P.scale.setScalar(l.size || 6);
     const A = (geo, m, x, y, z) => M(geo, m, x, y, z, P);
     const sc = (m, x, y, z) => { m.scale.set(x, y, z); return m; };
     const seg = (a, b, r1, r2, m) => { const va = new THREE.Vector3(...a), vb = new THREE.Vector3(...b);
       const me = A(new THREE.CylinderGeometry(r2, r1, va.distanceTo(vb), 18), m, (va.x + vb.x) / 2, (va.y + vb.y) / 2, (va.z + vb.z) / 2); me.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vb.clone().sub(va).normalize());
       A(new THREE.SphereGeometry(r2, 16, 12), m, vb.x, vb.y, vb.z); };
-    const base = 4.2 / 6;
+    const base = plinthTop / (l.size || 6);
     [-0.15, 0.15].forEach(x => { sc(A(new THREE.SphereGeometry(0.12, 18, 12), shoe, x, base + 0.07, 0.05), 1.05, 0.62, 1.7); sc(A(new THREE.SphereGeometry(0.125, 18, 12), sole, x, base + 0.03, 0.05), 1.1, 0.28, 1.75);
       seg([x, base + 0.16, 0], [x, base + 0.78, 0], 0.11, 0.115, jeans); A(new THREE.CylinderGeometry(0.13, 0.13, 0.08, 18), jeansDark, x, base + 0.19, 0); });
     sc(A(new THREE.SphereGeometry(0.25, 20, 14), jeans, 0, base + 0.82, 0), 1.25, 0.6, 0.85);
@@ -347,15 +348,17 @@ function buildMap(scene, renderer){
     A(new THREE.TorusGeometry(0.08, 0.012, 8, 16, Math.PI * 0.85), ink, 0.02, hy - 0.11, 0.315).rotation.z = Math.PI + 0.25;
     // plinth, plaque, plaza and planters
     const stone = std('#d8d2c4', { roughness: 0.85 }), stoneDark = std('#bdb6a6', { roughness: 0.85 });
-    M(new THREE.BoxGeometry(11, 0.8, 11), stoneDark, 0, 0.4, 0); M(new THREE.BoxGeometry(9, 3.2, 9), stone, 0, 2.4, 0); M(new THREE.BoxGeometry(9.6, 0.4, 9.6), stoneDark, 0, 4.0, 0);
+    const PL = new THREE.Group(); g.add(PL); PL.scale.setScalar(k);
+    const MP = (geo, m, x, y, z) => M(geo, m, x, y, z, PL);
+    MP(new THREE.BoxGeometry(11, 0.8, 11), stoneDark, 0, 0.4, 0); MP(new THREE.BoxGeometry(9, 3.2, 9), stone, 0, 2.4, 0); MP(new THREE.BoxGeometry(9.6, 0.4, 9.6), stoneDark, 0, 4.0, 0);
     const pc = document.createElement('canvas'); pc.width = 512; pc.height = 160; const c = pc.getContext('2d');
     c.fillStyle = '#b08d57'; c.fillRect(0, 0, 512, 160); c.strokeStyle = '#6b5230'; c.lineWidth = 8; c.strokeRect(8, 8, 496, 144);
     c.fillStyle = '#3d2c14'; c.textAlign = 'center'; c.font = 'bold 54px Georgia, serif'; c.fillText('CHILLHOUSE', 256, 72); c.font = '30px Georgia, serif'; c.fillText('Pride of Solangeles', 256, 122);
-    M(new THREE.BoxGeometry(5, 1.6, 0.1), std('#ffffff', { map: new THREE.CanvasTexture(pc), metalness: 0.4, roughness: 0.4 }), 0, 2.4, 4.53);
-    M(new THREE.CylinderGeometry(13, 13, 0.25, 48), std('#cfcfcf', { roughness: 0.9 }), 0, 0.12, 0);
-    [[-10, 6], [10, 6], [-10, -6], [10, -6]].forEach(([x, z]) => { M(new THREE.CylinderGeometry(1.4, 1.6, 1, 16), stone, x, 0.5, z);
-      [[0, 1.6, 0, 1.2], [0.6, 1.4, 0.3, 0.9], [-0.5, 1.4, -0.3, 0.9]].forEach(([dx, y, dz, r]) => M(new THREE.SphereGeometry(r, 12, 9), std(T.treeLeaves), x + dx, y, z + dz)); });
-    circles.push({ x: l.x, z: l.z, r: 7.2 });   // crash into the plinth
+    MP(new THREE.BoxGeometry(5, 1.6, 0.1), std('#ffffff', { map: new THREE.CanvasTexture(pc), metalness: 0.4, roughness: 0.4 }), 0, 2.4, 4.53);
+    MP(new THREE.CylinderGeometry(13, 13, 0.25, 48), std('#cfcfcf', { roughness: 0.9 }), 0, 0.12, 0);
+    [[-10, 6], [10, 6], [-10, -6], [10, -6]].forEach(([x, z]) => { MP(new THREE.CylinderGeometry(1.4, 1.6, 1, 16), stone, x, 0.5, z);
+      [[0, 1.6, 0, 1.2], [0.6, 1.4, 0.3, 0.9], [-0.5, 1.4, -0.3, 0.9]].forEach(([dx, y, dz, r]) => MP(new THREE.SphereGeometry(r, 12, 9), std(T.treeLeaves), x + dx, y, z + dz)); });
+    circles.push({ x: l.x, z: l.z, r: 7.2 * k });   // crash into the plinth
   }
 
   // ---------- scenery ----------
@@ -366,7 +369,17 @@ function buildMap(scene, renderer){
   };
   const styleAt = (x, z) => { const d = L.districts.find(d => x >= d.area[0] && x <= d.area[1] && z >= d.area[2] && z <= d.area[3]); return T.styles[d ? d.style : 'town']; };
   const solids = [], circles = [], lim = L.size - 8;
-  const landmarks = (L.landmarks || []).map(l => ({ x: l.at[0], z: l.at[1], r: l.type === 'chillhouseStatue' ? 15 : 17, type: l.type, face: l.face }));
+  const landmarks = (L.landmarks || []).map(l => ({ x: l.at[0], z: l.at[1], r: l.type === 'chillhouseStatue' ? 18 : 17, type: l.type, face: l.face, size: l.size, clearView: l.clearView }));
+  // keep a clear line of sight from the approaching road to landmarks marked clearView
+  const sightLines = [];
+  landmarks.filter(l => l.clearView).forEach(l => {
+    for (let i = 0; i < N; i += 3) { const p = S[i], dx = l.x - p.x, dz = l.z - p.z, d = Math.hypot(dx, dz);
+      if (d > 30 && d < 240 && (dx * p.tx + dz * p.tz) / d > Math.cos(16 * Math.PI / 180)) sightLines.push([p.x, p.z, l.x, l.z]); }
+  });
+  const blocksView = (x, z, pad) => sightLines.some(([ax, az, bx, bz]) => {
+    const vx = bx - ax, vz = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz)));
+    return Math.hypot(x - ax - vx * t, z - az - vz * t) < pad;
+  });
   const nearLandmark = (x, z, pad) => landmarks.some(l => Math.hypot(x - l.x, z - l.z) < l.r + pad);
   landmarks.forEach(l => { if (l.type === 'pillTower') buildPillTower(l); if (l.type === 'chillhouseStatue') buildChillhouseStatue(l); });
   let tries = 0;
@@ -377,7 +390,7 @@ function buildMap(scene, renderer){
     if (distRoad(x, z) < Math.hypot(w, d) / 2 + 4) continue;
     if (L.water.some(wt => x + w / 2 + 4 > wt.minX && x - w / 2 - 4 < wt.maxX && z + d / 2 + 4 > wt.minZ && z - d / 2 - 4 < wt.maxZ)) continue;
     if (solids.some(b => x + w / 2 + 3 > b.minX && x - w / 2 - 3 < b.maxX && z + d / 2 + 3 > b.minZ && z - d / 2 - 3 < b.maxZ)) continue;
-    if (nearLandmark(x, z, Math.hypot(w, d) / 2 + 3)) continue;
+    if (nearLandmark(x, z, Math.hypot(w, d) / 2 + 3) || blocksView(x, z, Math.hypot(w, d) / 2 + 3)) continue;
     const h = st.minHeight + rand() * (st.maxHeight - st.minHeight);
     solids.push({ minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2, h, color: st.colors[Math.floor(rand() * st.colors.length)], roof: st.roof, roofColor: st.roofColor });
   }
@@ -442,7 +455,7 @@ function buildMap(scene, renderer){
     if (rand() > styleAt(x, z).trees * 0.6) continue;
     if (distRoad(x, z) < 7 || inWater(x, z, 4)) continue;
     if (solids.some(b => x > b.minX - 3 && x < b.maxX + 3 && z > b.minZ - 3 && z < b.maxZ + 3)) continue;
-    if (nearLandmark(x, z, 3)) continue;
+    if (nearLandmark(x, z, 3) || blocksView(x, z, 6)) continue;
     trees.push({ x, z, s: 0.8 + rand() * 0.6 });
   }
   for (let i = 0; i < 90; i++) { const a = rand() * Math.PI * 2, r = L.size + 15 + rand() * 90, x = Math.cos(a) * r, z = Math.sin(a) * r; if (!inWater(x, z, 3)) trees.push({ x, z, s: 0.9 + rand() * 0.8, outside: true }); }
@@ -476,7 +489,7 @@ function buildMap(scene, renderer){
     const x = (rand() * 2 - 1) * lim, z = (rand() * 2 - 1) * lim;
     if (distRoad(x, z) < 3 || inWater(x, z, 3)) continue;
     if (solids.some(b => x > b.minX - 1.5 && x < b.maxX + 1.5 && z > b.minZ - 1.5 && z < b.maxZ + 1.5)) continue;
-    if (nearLandmark(x, z, 1)) continue;
+    if (nearLandmark(x, z, 1) || blocksView(x, z, 3)) continue;
     bushes.push([x, z, 0.6 + rand() * 0.8]);
   }
   const bushMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 9, 6), mat('#ffffff'), bushes.length);
